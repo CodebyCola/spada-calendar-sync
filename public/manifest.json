@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "SPADA UPNYK Assignment Scanner",
+  "version": "1.0.0",
+  "description": "Pindai semua tugas SPADA Wimaya UPNYK (termasuk yang tidak masuk kalender Moodle) dan sinkronkan ke Google Calendar.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "SPADA UPNYK Assignment Scanner",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://spada.upnyk.ac.id/*"],
+      "js": ["content/spada-observer.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options/options.html",
+  "permissions": ["storage", "alarms", "identity"],
+  "host_permissions": [
+    "https://spada.upnyk.ac.id/*",
+    "https://www.googleapis.com/*"
+  ],
+  "oauth2": {
+    "client_id": "YOUR_CHROME_EXTENSION_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/calendar.events"]
+  }
+}

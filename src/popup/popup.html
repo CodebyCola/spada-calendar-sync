@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SPADA UPNYK Assignment Scanner</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div>
+        <h1>SPADA Scanner</h1>
+        <p id="meta-line" class="meta">Belum pernah dipindai</p>
+      </div>
+      <button id="btn-options" class="icon-btn" title="Pengaturan &amp; Info Extension ID">⚙️</button>
+    </header>
+
+    <section id="alert-box" class="alert hidden"></section>
+
+    <section class="actions">
+      <button id="btn-scan" class="btn btn-primary">🔍 Scan SPADA</button>
+      <button id="btn-sync" class="btn btn-secondary">📅 Sync ke Calendar</button>
+    </section>
+
+    <section class="tabs">
+      <button id="tab-pending" class="tab active">Belum Dikumpulkan (<span id="count-pending">0</span>)</button>
+      <button id="tab-all" class="tab">Semua Tugas (<span id="count-all">0</span>)</button>
+    </section>
+
+    <main id="assignment-list" class="list"></main>
+
+    <footer class="footer">
+      <span id="sync-status">Google Calendar: belum terhubung</span>
+      <button id="btn-connect" class="link-btn">Hubungkan</button>
+    </footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pengaturan — SPADA Assignment Scanner</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Pengaturan SPADA Assignment Scanner</h1>
+
+      <section class="panel">
+        <h2>1. Extension ID &amp; Setup Google Calendar OAuth</h2>
+        <p class="hint">
+          Untuk menghubungkan Google Calendar di mode <em>Load Unpacked</em> atau sebelum publish ke Chrome Web Store,
+          buat <strong>OAuth Client ID (tipe: Chrome Extension)</strong> di Google Cloud Console menggunakan Extension ID berikut:
+        </p>
+        <div class="id-box">
+          <code id="extension-id">Memuat...</code>
+        </div>
+        <p class="hint">
+          Lalu tempel <code>Client ID</code>-nya ke kolom <code>oauth2.client_id</code> di <code>public/manifest.json</code> dan jalankan <code>npm run build</code>.
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>2. Preferensi Sinkronisasi</h2>
+        <label class="field">
+          <span>Google Calendar ID (default: <code>primary</code>)</span>
+          <input id="calendar-id" type="text" placeholder="primary" />
+        </label>
+
+        <label class="checkbox">
+          <input id="sync-submitted" type="checkbox" />
+          <span>Ikut sinkronkan tugas yang sudah dikumpulkan (ditandai <code>✅ [SELESAI]</code>)</span>
+        </label>
+
+        <label class="checkbox">
+          <input id="include-past" type="checkbox" />
+          <span>Sertakan tugas yang tenggatnya sudah lewat lebih dari 7 hari</span>
+        </label>
+
+        <label class="checkbox">
+          <input id="auto-visit" type="checkbox" />
+          <span>Pindai otomatis saat membuka SPADA (maksimal 1x per 15 menit)</span>
+        </label>
+
+        <div class="row">
+          <button id="btn-save" class="btn">Simpan Pengaturan</button>
+          <span id="save-status" class="status"></span>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
