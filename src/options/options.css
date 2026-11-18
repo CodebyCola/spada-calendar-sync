@@ -97,6 +97,14 @@ h2 {
   background: #164e8c;
 }
 
+.btn-danger {
+  background: #dc2626;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
 .status {
   font-size: 12px;
   color: #166534;

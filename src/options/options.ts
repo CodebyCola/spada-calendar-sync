@@ -6,6 +6,7 @@ const syncSubmittedInput = document.getElementById("sync-submitted") as HTMLInpu
 const includePastInput = document.getElementById("include-past") as HTMLInputElement;
 const autoVisitInput = document.getElementById("auto-visit") as HTMLInputElement;
 const btnSave = document.getElementById("btn-save") as HTMLButtonElement;
+const btnClear = document.getElementById("btn-clear") as HTMLButtonElement;
 const saveStatus = document.getElementById("save-status") as HTMLSpanElement;
 
 async function init(): Promise<void> {
@@ -30,6 +31,16 @@ btnSave.addEventListener("click", async () => {
   setTimeout(() => {
     saveStatus.textContent = "";
   }, 2000);
+});
+
+btnClear.addEventListener("click", async () => {
+  await chrome.storage.local.clear();
+  await chrome.action.setBadgeText({ text: "" });
+  await init();
+  saveStatus.textContent = "Semua data scan & pengaturan lokal dihapus!";
+  setTimeout(() => {
+    saveStatus.textContent = "";
+  }, 2500);
 });
 
 void init();

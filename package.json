@@ -7,7 +7,10 @@
     "build": "node scripts/build.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "promo": "node scripts/generate-promo.mjs",
+    "package": "node scripts/package.mjs",
+    "package:strict": "node scripts/package.mjs --strict"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",
