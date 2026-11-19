@@ -1,4 +1,12 @@
-import type { StoredExtensionState, SyncSummary } from "../shared/storage.js";
+import type {
+  StateMutationDecision,
+  StoredExtensionState,
+  SyncSummary,
+} from "../shared/storage.js";
+
+export type AtomicStateMutator = <T>(
+  mutator: (current: StoredExtensionState) => StateMutationDecision<T>
+) => Promise<{ state: StoredExtensionState; result: T }>;
 
 export type DisconnectedStatePatch = Pick<
   StoredExtensionState,
@@ -33,11 +41,31 @@ export function buildConnectedStatePatch(
   };
 }
 
+function resolveMutator(deps: {
+  mutateState?: AtomicStateMutator;
+  getState: () => Promise<StoredExtensionState>;
+  updateState: (patch: Partial<StoredExtensionState>) => Promise<StoredExtensionState>;
+}): AtomicStateMutator {
+  if (deps.mutateState) {
+    return deps.mutateState;
+  }
+  return async <T>(mutator: (current: StoredExtensionState) => StateMutationDecision<T>) => {
+    const current = await deps.getState();
+    const { patch, result } = mutator(current);
+    if (!patch) {
+      return { state: current, result };
+    }
+    const next = await deps.updateState(patch);
+    return { state: next, result };
+  };
+}
+
 export interface RevalidateLegacyAuthDeps {
   oauthConfigured: boolean;
   getSilentToken: () => Promise<string | null>;
   getState?: () => Promise<StoredExtensionState>;
   updateState: (patch: Partial<StoredExtensionState>) => Promise<StoredExtensionState>;
+  mutateState?: AtomicStateMutator;
 }
 
 const TRANSIENT_NETWORK_ERROR_PATTERN =
@@ -49,6 +77,7 @@ const AUTH_INVALIDATED_ERROR_PATTERN =
 /**
  * Revalidates legacy stored states where `googleConnected` was set true before
  * `googleAuthVerified` existed (such as the old unauthenticated 0-assignment sync path).
+ * Performs generation checks atomically inside `mutateState` so concurrent disconnects win.
  */
 export async function revalidateLegacyGoogleAuth(
   state: StoredExtensionState,
@@ -59,35 +88,51 @@ export async function revalidateLegacyGoogleAuth(
   }
 
   const startGeneration = state.googleSessionGeneration;
-  const isStillCurrentGeneration = async (): Promise<StoredExtensionState | null> => {
-    if (!deps.getState) {
-      return state;
-    }
-    const latest = await deps.getState();
-    return latest.googleSessionGeneration === startGeneration ? latest : null;
-  };
+  const mutate = resolveMutator({
+    mutateState: deps.mutateState,
+    getState: deps.getState ?? (async () => state),
+    updateState: deps.updateState,
+  });
 
   try {
     const token = await deps.getSilentToken();
-    const current = await isStillCurrentGeneration();
-    if (!current) {
-      return (await deps.getState?.()) ?? state;
-    }
-    if (token && token.trim().length > 0) {
-      return await deps.updateState({ googleAuthVerified: true });
-    }
-    return await deps.updateState(buildDisconnectedStatePatch(current.googleSessionGeneration));
+    const { state: updated } = await mutate((current) => {
+      if (
+        current.googleSessionGeneration !== startGeneration ||
+        !current.googleConnected ||
+        current.googleAuthVerified
+      ) {
+        return { patch: null, result: undefined };
+      }
+      if (token && token.trim().length > 0) {
+        return { patch: { googleAuthVerified: true }, result: undefined };
+      }
+      return {
+        patch: buildDisconnectedStatePatch(current.googleSessionGeneration),
+        result: undefined,
+      };
+    });
+    return updated;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (TRANSIENT_NETWORK_ERROR_PATTERN.test(message)) {
       return state;
     }
     if (AUTH_INVALIDATED_ERROR_PATTERN.test(message)) {
-      const current = await isStillCurrentGeneration();
-      if (!current) {
-        return (await deps.getState?.()) ?? state;
-      }
-      return await deps.updateState(buildDisconnectedStatePatch(current.googleSessionGeneration));
+      const { state: updated } = await mutate((current) => {
+        if (
+          current.googleSessionGeneration !== startGeneration ||
+          !current.googleConnected ||
+          current.googleAuthVerified
+        ) {
+          return { patch: null, result: undefined };
+        }
+        return {
+          patch: buildDisconnectedStatePatch(current.googleSessionGeneration),
+          result: undefined,
+        };
+      });
+      return updated;
     }
     return state;
   }
@@ -96,48 +141,67 @@ export async function revalidateLegacyGoogleAuth(
 export interface SessionGuardedSyncDeps {
   getState: () => Promise<StoredExtensionState>;
   updateState: (patch: Partial<StoredExtensionState>) => Promise<StoredExtensionState>;
+  mutateState?: AtomicStateMutator;
   runSync: (state: StoredExtensionState) => Promise<SyncSummary>;
   expectedGeneration?: number;
+  requireConnected?: boolean;
   nowIso?: () => string;
 }
 
 /**
- * Runs a calendar sync guarded by `googleSessionGeneration` so an in-flight sync
- * cannot overwrite or resurrect a session that was disconnected before completion.
+ * Runs a calendar sync guarded atomically by `googleSessionGeneration` inside `mutateState`
+ * so an in-flight sync cannot resurrect a session whose disconnect is pending or completed.
  */
 export async function runSessionGuardedSync(
   deps: SessionGuardedSyncDeps
 ): Promise<{ stale: boolean; summary: SyncSummary | null }> {
+  const mutate = resolveMutator(deps);
   const initialState = await deps.getState();
+
   if (
     deps.expectedGeneration !== undefined &&
     initialState.googleSessionGeneration !== deps.expectedGeneration
   ) {
     return { stale: true, summary: null };
   }
+  if (
+    deps.requireConnected &&
+    (!initialState.googleConnected || !initialState.googleAuthVerified)
+  ) {
+    return { stale: true, summary: null };
+  }
+
   const startGeneration = initialState.googleSessionGeneration;
 
   try {
     const summary = await deps.runSync(initialState);
-    const latest = await deps.getState();
-    if (latest.googleSessionGeneration !== startGeneration) {
-      return { stale: true, summary: null };
-    }
-    await deps.updateState({
-      googleConnected: true,
-      googleAuthVerified: true,
-      lastSyncAt: (deps.nowIso ?? (() => new Date().toISOString()))(),
-      lastSyncSummary: summary,
-      lastSyncError: null,
+    const { result: isStale } = await mutate((current) => {
+      if (current.googleSessionGeneration !== startGeneration) {
+        return { patch: null, result: true };
+      }
+      return {
+        patch: {
+          googleConnected: true,
+          googleAuthVerified: true,
+          lastSyncAt: (deps.nowIso ?? (() => new Date().toISOString()))(),
+          lastSyncSummary: summary,
+          lastSyncError: null,
+        },
+        result: false,
+      };
     });
-    return { stale: false, summary };
+    return isStale ? { stale: true, summary: null } : { stale: false, summary };
   } catch (err) {
-    const latest = await deps.getState();
-    if (latest.googleSessionGeneration !== startGeneration) {
+    const message = err instanceof Error ? err.message : String(err);
+    const { result: isStale } = await mutate((current) => {
+      if (current.googleSessionGeneration !== startGeneration) {
+        return { patch: null, result: true };
+      }
+      return { patch: { lastSyncError: message }, result: false };
+    });
+    if (isStale) {
       return { stale: true, summary: null };
     }
-    const message = err instanceof Error ? err.message : String(err);
-    await deps.updateState({ lastSyncError: message });
     throw err;
   }
 }
@@ -145,33 +209,38 @@ export async function runSessionGuardedSync(
 export interface SessionGuardedConnectDeps {
   getState: () => Promise<StoredExtensionState>;
   updateState: (patch: Partial<StoredExtensionState>) => Promise<StoredExtensionState>;
+  mutateState?: AtomicStateMutator;
   requestToken: () => Promise<string>;
 }
 
 /**
- * Runs Google account connection guarded by `googleSessionGeneration`, clearing any stale
- * legacy `lastSyncAt`/`lastSyncSummary` when transitioning from a disconnected state.
+ * Runs Google account connection guarded atomically by `googleSessionGeneration`,
+ * clearing any stale legacy `lastSyncAt`/`lastSyncSummary` when connecting from disconnected state.
  */
 export async function runSessionGuardedConnect(
   deps: SessionGuardedConnectDeps
 ): Promise<{ stale: boolean; state: StoredExtensionState }> {
+  const mutate = resolveMutator(deps);
   const initialState = await deps.getState();
   const startGeneration = initialState.googleSessionGeneration;
 
   try {
     await deps.requestToken();
-    const latest = await deps.getState();
-    if (latest.googleSessionGeneration !== startGeneration) {
-      return { stale: true, state: latest };
-    }
-    const updated = await deps.updateState(buildConnectedStatePatch(latest));
-    return { stale: false, state: updated };
+    const { state: updated, result: isStale } = await mutate((current) => {
+      if (current.googleSessionGeneration !== startGeneration) {
+        return { patch: null, result: true };
+      }
+      return { patch: buildConnectedStatePatch(current), result: false };
+    });
+    return { stale: isStale, state: updated };
   } catch (err) {
-    const latest = await deps.getState();
-    if (latest.googleSessionGeneration === startGeneration) {
-      const message = err instanceof Error ? err.message : String(err);
-      await deps.updateState({ lastSyncError: message });
-    }
+    const message = err instanceof Error ? err.message : String(err);
+    await mutate((current) => {
+      if (current.googleSessionGeneration !== startGeneration) {
+        return { patch: null, result: undefined };
+      }
+      return { patch: { lastSyncError: message }, result: undefined };
+    });
     throw err;
   }
 }
@@ -179,20 +248,23 @@ export async function runSessionGuardedConnect(
 export interface DisconnectGoogleDeps {
   getState: () => Promise<StoredExtensionState>;
   updateState: (patch: Partial<StoredExtensionState>) => Promise<StoredExtensionState>;
+  mutateState?: AtomicStateMutator;
   revokeCachedToken: () => Promise<void>;
 }
 
 /**
- * Immediately increments `googleSessionGeneration` and clears connected/sync state BEFORE
- * performing best-effort token revocation so concurrent in-flight syncs cannot resurrect auth.
+ * Atomically increments `googleSessionGeneration` and clears connected/sync state inside
+ * the serialized storage queue BEFORE performing best-effort token revocation.
  */
 export async function runDisconnectGoogle(
   deps: DisconnectGoogleDeps
 ): Promise<StoredExtensionState> {
-  const current = await deps.getState();
-  const disconnected = await deps.updateState(
-    buildDisconnectedStatePatch(current.googleSessionGeneration)
-  );
+  const mutate = resolveMutator(deps);
+  const { state: disconnected } = await mutate((current) => ({
+    patch: buildDisconnectedStatePatch(current.googleSessionGeneration),
+    result: undefined,
+  }));
+
   try {
     await deps.revokeCachedToken();
   } catch {

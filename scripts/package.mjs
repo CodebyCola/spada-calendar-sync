@@ -42,7 +42,8 @@ export async function packageExtension(options = {}) {
     throw new Error(`Unsupported --target "${target}". Use "store" or "unpacked".`);
   }
 
-  const strictOAuth = options.strictOAuth ?? (target === "unpacked");
+  // Unpacked distribution ZIPs always enforce strict OAuth (never ship placeholder clientId)
+  const strictOAuth = target === "unpacked" ? true : (options.strictOAuth ?? false);
   const cwd = process.cwd();
   const stagingDir = mkdtempSync(join(tmpdir(), `spada-ext-${target}-`));
 
@@ -51,6 +52,7 @@ export async function packageExtension(options = {}) {
     const built = await buildExtension({
       target,
       outDir: stagingDir,
+      allowCleanStaging: true,
       unpackedConfig: target === "unpacked" ? options.unpackedConfig : undefined,
       unpackedConfigPath: options.unpackedConfigPath,
       baseManifestPath: options.baseManifestPath,

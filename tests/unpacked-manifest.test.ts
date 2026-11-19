@@ -57,6 +57,15 @@ describe("deriveExtensionIdFromPublicKey", () => {
     ).toString("base64");
     expect(() => deriveExtensionIdFromPublicKey(rsa1024SpkiB64)).toThrow(/2048/i);
   });
+
+  it("Rejects valid RSA-2048 SPKI public key followed by trailing bytes", () => {
+    const validDer = Buffer.from(SAMPLE_SPKI_KEY, "base64");
+    const withOneTrailingByte = Buffer.concat([validDer, Buffer.from([0x00])]).toString("base64");
+    const withTextMarker = Buffer.concat([validDer, Buffer.from("EXTRA")]).toString("base64");
+
+    expect(() => deriveExtensionIdFromPublicKey(withOneTrailingByte)).toThrow(/SPKI|trailing|canonical/i);
+    expect(() => deriveExtensionIdFromPublicKey(withTextMarker)).toThrow(/SPKI|trailing|canonical/i);
+  });
 });
 
 describe("validateUnpackedConfig", () => {

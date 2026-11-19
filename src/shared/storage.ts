@@ -59,11 +59,20 @@ export async function getStoredState(): Promise<StoredExtensionState> {
   };
 }
 
-export async function updateStoredState(
-  patch: Partial<StoredExtensionState>
-): Promise<StoredExtensionState> {
-  const runWrite = async (): Promise<StoredExtensionState> => {
+export interface StateMutationDecision<T> {
+  patch?: Partial<StoredExtensionState> | null;
+  result: T;
+}
+
+export async function mutateStoredState<T>(
+  mutator: (current: StoredExtensionState) => StateMutationDecision<T>
+): Promise<{ state: StoredExtensionState; result: T }> {
+  const runMutation = async (): Promise<{ state: StoredExtensionState; result: T }> => {
     const current = await getStoredState();
+    const { patch, result } = mutator(current);
+    if (!patch) {
+      return { state: current, result };
+    }
     const next: StoredExtensionState = {
       ...current,
       ...patch,
@@ -73,10 +82,17 @@ export async function updateStoredState(
       },
     };
     await chrome.storage.local.set({ [STORAGE_KEY]: next });
-    return next;
+    return { state: next, result };
   };
 
-  const pending = storageWriteQueue.then(runWrite, runWrite);
+  const pending = storageWriteQueue.then(runMutation, runMutation);
   storageWriteQueue = pending.catch(() => {});
   return pending;
+}
+
+export async function updateStoredState(
+  patch: Partial<StoredExtensionState>
+): Promise<StoredExtensionState> {
+  const { state } = await mutateStoredState(() => ({ patch, result: undefined }));
+  return state;
 }

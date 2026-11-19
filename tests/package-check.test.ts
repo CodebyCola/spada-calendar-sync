@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { buildExtension } from "../scripts/build.mjs";
 import { packageExtension } from "../scripts/package.mjs";
+import { UNPACKED_CLIENT_ID_PLACEHOLDER } from "../scripts/unpacked-manifest.mjs";
 import { validateManifestForStore } from "../scripts/validate-manifest.mjs";
 
 const VALID_RSA2048_SPKI_KEY =
@@ -192,4 +194,45 @@ describe("packageExtension isolation", () => {
       rmSync(workDir, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+describe("buildExtension outDir safety & packageExtension unpacked strictness", () => {
+  it("Refuses empty outDir, project root, src/, and arbitrary non-empty directories without deleting files", async () => {
+    await expect(buildExtension({ target: "store", outDir: "" })).rejects.toThrow(/outDir|out-dir/i);
+    await expect(buildExtension({ target: "store", outDir: "." })).rejects.toThrow(/outDir|out-dir|root/i);
+    await expect(buildExtension({ target: "store", outDir: "src" })).rejects.toThrow(/outDir|out-dir|non-empty|dist/i);
+
+    const guardDir = mkdtempSync(join(tmpdir(), "spada-outdir-guard-"));
+    const sentinel = join(guardDir, "keep-me.txt");
+    writeFileSync(sentinel, "do not delete", "utf8");
+    try {
+      await expect(buildExtension({ target: "store", outDir: guardDir })).rejects.toThrow(
+        /non-empty|dist|outDir/i
+      );
+      expect(existsSync(sentinel)).toBe(true);
+      expect(readFileSync(sentinel, "utf8")).toBe("do not delete");
+    } finally {
+      rmSync(guardDir, { recursive: true, force: true });
+    }
+  });
+
+  it("Always rejects unpacked placeholder clientId in packageExtension even when strictOAuth: false is passed", async () => {
+    const workDir = mkdtempSync(join(tmpdir(), "spada-unpacked-strict-test-"));
+    try {
+      await expect(
+        packageExtension({
+          target: "unpacked",
+          strictOAuth: false,
+          releaseDir: join(workDir, "release"),
+          unpackedConfig: {
+            publicKey: VALID_RSA2048_SPKI_KEY,
+            extensionId: VALID_RSA2048_ID,
+            clientId: UNPACKED_CLIENT_ID_PLACEHOLDER,
+          },
+        })
+      ).rejects.toThrow(/placeholder|client_id/i);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  }, 15_000);
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   buildDisconnectedStatePatch,
   handleExtensionInstalled,
@@ -8,7 +8,13 @@ import {
   runSessionGuardedSync,
 } from "../src/background/install-lifecycle.js";
 import { evaluateSetupStatus } from "../src/setup/setup-diagnostics.js";
-import { DEFAULT_SETTINGS, type StoredExtensionState } from "../src/shared/storage.js";
+import {
+  DEFAULT_SETTINGS,
+  getStoredState,
+  mutateStoredState,
+  type StoredExtensionState,
+  updateStoredState,
+} from "../src/shared/storage.js";
 
 function makeState(overrides: Partial<StoredExtensionState> = {}): StoredExtensionState {
   return {
@@ -323,5 +329,231 @@ describe("Google session concurrency & legacy disconnect migration", () => {
     expect(status.steps.firstSync.state).toBe("active");
     expect(status.overallReady).toBe(false);
     expect(status.hasCompletedInitialSetup).toBe(false);
+  });
+});
+
+describe("Atomic storage-queue generation checks under pending disconnect writes", () => {
+  const originalChrome = (globalThis as { chrome?: unknown }).chrome;
+
+  afterEach(() => {
+    (globalThis as { chrome?: unknown }).chrome = originalChrome;
+  });
+
+  function installInMemoryChromeStorage(initial: StoredExtensionState) {
+    let data: Record<string, unknown> = { spadaScannerState: structuredClone(initial) };
+    let holdNextSet = false;
+    let setStartedResolve: (() => void) | null = null;
+    let releaseHeldSet: (() => void) | null = null;
+
+    const waitUntilHeldSetStarts = () =>
+      new Promise<void>((resolve) => {
+        setStartedResolve = resolve;
+      });
+
+    (globalThis as { chrome?: unknown }).chrome = {
+      storage: {
+        local: {
+          get: async (key: string) => ({ [key]: structuredClone(data[key]) }),
+          set: async (items: Record<string, unknown>) => {
+            if (holdNextSet) {
+              holdNextSet = false;
+              setStartedResolve?.();
+              await new Promise<void>((resolve) => {
+                releaseHeldSet = resolve;
+              });
+            }
+            data = { ...data, ...structuredClone(items) };
+          },
+        },
+      },
+    };
+
+    return {
+      armHoldOnNextSet: () => {
+        holdNextSet = true;
+      },
+      waitUntilHeldSetStarts,
+      releaseSet: () => {
+        releaseHeldSet?.();
+      },
+    };
+  }
+
+  it("Does not resurrect Google connection when SYNC finishes while DISCONNECT write is still pending in storage queue", async () => {
+    const harness = installInMemoryChromeStorage(
+      makeState({
+        lastScanAt: "2026-11-19T00:00:00.000Z",
+        googleConnected: true,
+        googleAuthVerified: true,
+        googleSessionGeneration: 1,
+      })
+    );
+
+    let releaseSync!: (summary: { created: number; updated: number; skipped: number }) => void;
+    const heldSync = new Promise<{ created: number; updated: number; skipped: number }>((resolve) => {
+      releaseSync = resolve;
+    });
+
+    const syncTask = runSessionGuardedSync({
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      runSync: () => heldSync,
+    });
+
+    // Ensure sync captured startGeneration=1 before disconnect starts
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Hold disconnect's chrome.storage.local.set mid-flight inside the storage queue
+    harness.armHoldOnNextSet();
+    const setStarted = harness.waitUntilHeldSetStarts();
+    const disconnectTask = runDisconnectGoogle({
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      revokeCachedToken: async () => {},
+    });
+    await setStarted;
+
+    // Release sync WHILE disconnect's storage.local.set is still pending (storage.get still sees generation 1!)
+    releaseSync({ created: 5, updated: 0, skipped: 0 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Now let disconnect's storage write finish, then wait for both tasks
+    harness.releaseSet();
+    await disconnectTask;
+    const syncOutcome = await syncTask;
+
+    const finalState = await getStoredState();
+    expect(syncOutcome.stale).toBe(true);
+    expect(finalState.googleSessionGeneration).toBe(2);
+    expect(finalState.googleConnected).toBe(false);
+    expect(finalState.googleAuthVerified).toBe(false);
+    expect(finalState.lastSyncAt).toBeNull();
+  });
+
+  it("Does not resurrect Google connection when CONNECT or legacy revalidation finishes while DISCONNECT write is pending", async () => {
+    const harness = installInMemoryChromeStorage(
+      makeState({
+        lastScanAt: "2026-11-19T00:00:00.000Z",
+        googleConnected: true,
+        googleAuthVerified: false,
+        googleSessionGeneration: 1,
+      })
+    );
+
+    let releaseToken!: (token: string) => void;
+    const heldToken = new Promise<string>((resolve) => {
+      releaseToken = resolve;
+    });
+
+    const connectTask = runSessionGuardedConnect({
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      requestToken: () => heldToken,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    harness.armHoldOnNextSet();
+    const setStarted = harness.waitUntilHeldSetStarts();
+    const disconnectTask = runDisconnectGoogle({
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      revokeCachedToken: async () => {},
+    });
+    await setStarted;
+
+    releaseToken("fresh-token");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    harness.releaseSet();
+    await disconnectTask;
+    const connectOutcome = await connectTask;
+
+    const finalState = await getStoredState();
+    expect(connectOutcome.stale).toBe(true);
+    expect(finalState.googleSessionGeneration).toBe(2);
+    expect(finalState.googleConnected).toBe(false);
+    expect(finalState.googleAuthVerified).toBe(false);
+
+    // Also verify revalidateLegacyGoogleAuth under pending disconnect write
+    const revalHarness = installInMemoryChromeStorage(
+      makeState({
+        googleConnected: true,
+        googleAuthVerified: false,
+        googleSessionGeneration: 1,
+      })
+    );
+
+    let releaseSilentToken!: (tok: string | null) => void;
+    const heldSilent = new Promise<string | null>((resolve) => {
+      releaseSilentToken = resolve;
+    });
+
+    const initialLegacy = await getStoredState();
+    const revalTask = revalidateLegacyGoogleAuth(initialLegacy, {
+      oauthConfigured: true,
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      getSilentToken: () => heldSilent,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    revalHarness.armHoldOnNextSet();
+    const revalSetStarted = revalHarness.waitUntilHeldSetStarts();
+    const disconnectTask2 = runDisconnectGoogle({
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      revokeCachedToken: async () => {},
+    });
+    await revalSetStarted;
+
+    releaseSilentToken("legacy-token");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    revalHarness.releaseSet();
+    await disconnectTask2;
+    await revalTask;
+
+    const finalRevalState = await getStoredState();
+    expect(finalRevalState.googleSessionGeneration).toBe(2);
+    expect(finalRevalState.googleConnected).toBe(false);
+    expect(finalRevalState.googleAuthVerified).toBe(false);
+  });
+
+  it("Skips auto-sync when requireConnected is true and state was already disconnected", async () => {
+    const store = makeState({
+      lastScanAt: "2026-11-19T00:00:00.000Z",
+      googleConnected: false,
+      googleAuthVerified: false,
+      googleSessionGeneration: 2,
+    });
+
+    let runSyncCalled = false;
+    const outcome = await runSessionGuardedSync({
+      getState: async () => store,
+      updateState: async (p) => ({ ...store, ...p }),
+      expectedGeneration: 2,
+      requireConnected: true,
+      runSync: async () => {
+        runSyncCalled = true;
+        return { created: 1, updated: 0, skipped: 0 };
+      },
+    });
+
+    expect(outcome.stale).toBe(true);
+    expect(runSyncCalled).toBe(false);
   });
 });

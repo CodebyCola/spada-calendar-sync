@@ -1,5 +1,15 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, parse, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { UNPACKED_CONFIG_REL_PATH } from "./setup-unpacked.mjs";
@@ -7,18 +17,25 @@ import { buildManifestForTarget, validateUnpackedConfig } from "./unpacked-manif
 
 function parseBuildArgs(argv) {
   let target = "store";
-  let outDir = "dist";
+  /** @type {string | undefined} */
+  let outDir;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg?.startsWith("--target=")) {
       target = arg.slice("--target=".length);
-    } else if (arg === "--target" && argv[i + 1]) {
+    } else if (arg === "--target") {
+      if (!argv[i + 1]) {
+        throw new Error("Missing value after --target.");
+      }
       target = argv[i + 1];
       i++;
     } else if (arg?.startsWith("--out-dir=")) {
       outDir = arg.slice("--out-dir=".length);
-    } else if (arg === "--out-dir" && argv[i + 1]) {
+    } else if (arg === "--out-dir") {
+      if (!argv[i + 1]) {
+        throw new Error("Missing value after --out-dir.");
+      }
       outDir = argv[i + 1];
       i++;
     }
@@ -27,18 +44,28 @@ function parseBuildArgs(argv) {
   return { target, outDir };
 }
 
-function prepareCleanOutDir(outDir) {
-  if (!existsSync(outDir)) {
-    mkdirSync(outDir, { recursive: true });
+function isStrictlyInside(childPath, parentPath) {
+  const rel = relative(parentPath, childPath);
+  return rel.length > 0 && !rel.startsWith("..") && rel !== "." && !parse(rel).root;
+}
+
+function isSameOrAncestor(candidateDir, targetDir) {
+  const rel = relative(candidateDir, targetDir);
+  return rel === "" || (!rel.startsWith("..") && !parse(rel).root);
+}
+
+function cleanDirectory(dirPath) {
+  if (!existsSync(dirPath)) {
+    mkdirSync(dirPath, { recursive: true });
     return;
   }
   try {
-    rmSync(outDir, { recursive: true, force: true });
-    mkdirSync(outDir, { recursive: true });
+    rmSync(dirPath, { recursive: true, force: true });
+    mkdirSync(dirPath, { recursive: true });
   } catch (err) {
     if (err && (err.code === "EPERM" || err.code === "EBUSY")) {
-      for (const entry of readdirSync(outDir)) {
-        rmSync(join(outDir, entry), { recursive: true, force: true });
+      for (const entry of readdirSync(dirPath)) {
+        rmSync(join(dirPath, entry), { recursive: true, force: true });
       }
       return;
     }
@@ -46,11 +73,55 @@ function prepareCleanOutDir(outDir) {
   }
 }
 
+function validateAndPrepareOutDir(rawOutDir, cwd, allowCleanStaging) {
+  const effectiveRaw = rawOutDir === undefined ? "dist" : rawOutDir;
+  if (typeof effectiveRaw !== "string" || effectiveRaw.trim().length === 0) {
+    throw new Error('Invalid outDir (--out-dir): directory path must not be empty.');
+  }
+
+  const outDir = resolve(cwd, effectiveRaw.trim());
+  const normalizedCwd = resolve(cwd);
+  const defaultDistDir = resolve(normalizedCwd, "dist");
+  const systemTmpDir = resolve(tmpdir());
+
+  if (parse(outDir).root === outDir || isSameOrAncestor(outDir, normalizedCwd)) {
+    throw new Error(
+      `Refusing unsafe outDir "${outDir}": cannot target filesystem root, project root, or a parent of the repository.`
+    );
+  }
+
+  const isOwnedDist = outDir === defaultDistDir;
+  const isAuthorizedStaging = allowCleanStaging && isStrictlyInside(outDir, systemTmpDir);
+
+  if (isOwnedDist || isAuthorizedStaging) {
+    cleanDirectory(outDir);
+    return outDir;
+  }
+
+  // Custom outDir outside dist/ and packager staging: never recursively delete non-empty directories
+  if (existsSync(outDir)) {
+    const stat = statSync(outDir);
+    if (!stat.isDirectory()) {
+      throw new Error(`Invalid outDir "${outDir}": path exists and is not a directory.`);
+    }
+    if (readdirSync(outDir).length > 0) {
+      throw new Error(
+        `Refusing to clean or overwrite non-empty outDir "${outDir}". Use default "dist/" or an empty output directory.`
+      );
+    }
+    return outDir;
+  }
+
+  mkdirSync(outDir, { recursive: true });
+  return outDir;
+}
+
 /**
  * Builds the Chrome extension bundle and composed manifest into an isolated or default outDir.
  * @param {{
  *   target?: "store" | "unpacked";
  *   outDir?: string;
+ *   allowCleanStaging?: boolean;
  *   unpackedConfig?: any;
  *   unpackedConfigPath?: string;
  *   baseManifestPath?: string;
@@ -64,7 +135,6 @@ export async function buildExtension(options = {}) {
   }
 
   const cwd = process.cwd();
-  const outDir = resolve(cwd, options.outDir ?? "dist");
   const baseManifestPath = resolve(cwd, options.baseManifestPath ?? "public/manifest.json");
   const warnings = [];
 
@@ -87,7 +157,7 @@ export async function buildExtension(options = {}) {
     }
   }
 
-  prepareCleanOutDir(outDir);
+  const outDir = validateAndPrepareOutDir(options.outDir, cwd, options.allowCleanStaging === true);
 
   await build({
     entryPoints: {
@@ -142,7 +212,7 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
     for (const w of result.warnings) {
       console.warn(`[WARN] ${w}`);
     }
-    console.log(`Built Chrome extension cleanly into ${outDir} (target: ${result.target})`);
+    console.log(`Built Chrome extension cleanly into ${result.outDir} (target: ${result.target})`);
   } catch (err) {
     console.error(`[ERROR] ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);

@@ -41,7 +41,14 @@ export function deriveExtensionIdFromPublicKey(publicKeyBase64) {
     );
   }
 
-  const digest = createHash("sha256").update(derBytes).digest();
+  const canonicalSpkiDer = Buffer.from(parsedKey.export({ type: "spki", format: "der" }));
+  if (Buffer.compare(derBytes, canonicalSpkiDer) !== 0) {
+    throw new Error(
+      "Public key contains trailing bytes or non-canonical DER encoding; expected exact DER SPKI RSA-2048 bytes."
+    );
+  }
+
+  const digest = createHash("sha256").update(canonicalSpkiDer).digest();
   let extensionId = "";
   for (let i = 0; i < 16; i++) {
     const byte = digest[i] ?? 0;

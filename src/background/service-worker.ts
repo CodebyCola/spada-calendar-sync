@@ -1,5 +1,10 @@
 import type { SpadaCourse } from "../parsers/spada-html.js";
-import { getStoredState, updateStoredState, type StoredExtensionState } from "../shared/storage.js";
+import {
+  getStoredState,
+  mutateStoredState,
+  updateStoredState,
+  type StoredExtensionState,
+} from "../shared/storage.js";
 import {
   countPendingAssignments,
   handleExtensionInstalled,
@@ -41,6 +46,7 @@ async function revalidateStateIfNeeded(
   return revalidateLegacyGoogleAuth(state, {
     oauthConfigured: isOAuthClientConfigured(),
     getState: getStoredState,
+    mutateState: mutateStoredState,
     getSilentToken: async () => {
       if (typeof chrome.identity?.getAuthToken !== "function") {
         return null;
@@ -71,11 +77,17 @@ async function performScan(seedCourses?: SpadaCourse[]): Promise<void> {
   }
 }
 
-async function performSync(interactive: boolean, expectedGeneration?: number): Promise<void> {
+async function performSync(
+  interactive: boolean,
+  expectedGeneration?: number,
+  requireConnected = false
+): Promise<void> {
   await runSessionGuardedSync({
     getState: getStoredState,
     updateState: updateStoredState,
+    mutateState: mutateStoredState,
     expectedGeneration,
+    requireConnected,
     runSync: (state) =>
       syncAssignmentsToGoogleCalendar(state.assignments, state.settings, interactive),
   });
@@ -105,7 +117,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     await performScan();
     const state = await revalidateStateIfNeeded(await getStoredState());
     if (state.googleConnected && state.googleAuthVerified && isOAuthClientConfigured()) {
-      await performSync(false);
+      await performSync(false, state.googleSessionGeneration, true);
     }
   } catch (err) {
     console.warn("Background SPADA alarm scan skipped:", err);
@@ -132,6 +144,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
         const result = await runSessionGuardedConnect({
           getState: getStoredState,
           updateState: updateStoredState,
+          mutateState: mutateStoredState,
           requestToken: async () => {
             if (!isOAuthClientConfigured()) {
               throw new Error(
@@ -149,6 +162,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
         const state = await runDisconnectGoogle({
           getState: getStoredState,
           updateState: updateStoredState,
+          mutateState: mutateStoredState,
           revokeCachedToken: async () => {
             if (typeof chrome.identity?.getAuthToken !== "function") {
               return;
@@ -189,7 +203,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
         await performScan(message.courses);
         const updated = await revalidateStateIfNeeded(await getStoredState());
         if (updated.googleConnected && updated.googleAuthVerified && isOAuthClientConfigured()) {
-          await performSync(false);
+          await performSync(false, updated.googleSessionGeneration, true);
         }
         sendResponse({ ok: true });
       }
