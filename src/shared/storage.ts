@@ -22,6 +22,7 @@ export interface StoredExtensionState {
   lastSyncSummary: SyncSummary | null;
   lastSyncError: string | null;
   googleConnected: boolean;
+  googleAuthVerified: boolean;
   settings: ExtensionSettings;
 }
 
@@ -46,6 +47,7 @@ export async function getStoredState(): Promise<StoredExtensionState> {
     lastSyncSummary: raw?.lastSyncSummary ?? null,
     lastSyncError: raw?.lastSyncError ?? null,
     googleConnected: raw?.googleConnected ?? false,
+    googleAuthVerified: raw?.googleAuthVerified ?? false,
     settings: {
       ...DEFAULT_SETTINGS,
       ...(raw?.settings ?? {}),

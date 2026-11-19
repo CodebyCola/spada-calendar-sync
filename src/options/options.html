@@ -11,16 +11,25 @@
       <h1>Pengaturan SPADA Assignment Scanner</h1>
 
       <section class="panel">
-        <h2>1. Extension ID &amp; Setup Google Calendar OAuth</h2>
+        <h2>1. Panduan Setup &amp; Info Extension ID</h2>
         <p class="hint">
-          Untuk menghubungkan Google Calendar di mode <em>Load Unpacked</em> atau sebelum publish ke Chrome Web Store,
-          buat <strong>OAuth Client ID (tipe: Chrome Extension)</strong> di Google Cloud Console menggunakan Extension ID berikut:
+          Baru memasang ekstensi ini? Gunakan panduan setup interaktif 3 langkah untuk mengecek login SPADA dan menghubungkan Google Calendar milikmu.
         </p>
-        <div class="id-box">
-          <code id="extension-id">Memuat...</code>
+        <div class="row">
+          <button id="btn-open-onboarding" type="button" class="btn">Buka Panduan Setup</button>
         </div>
         <p class="hint">
-          Lalu tempel <code>Client ID</code>-nya ke kolom <code>oauth2.client_id</code> di <code>public/manifest.json</code> dan jalankan <code>npm run build</code>.
+          <strong>Extension ID saat ini</strong> (untuk kebutuhan developer / verifikasi OAuth Google Cloud Console):
+        </p>
+        <div class="id-row">
+          <div class="id-box">
+            <code id="extension-id">Memuat...</code>
+          </div>
+          <button id="btn-copy-id" type="button" class="btn btn-secondary">Salin ID</button>
+        </div>
+        <span id="copy-status" class="status" role="status" aria-live="polite"></span>
+        <p class="hint">
+          Untuk developer yang menyiapkan paket <em>Load Unpacked</em>: jalankan <code>npm run setup:unpacked</code>, masukkan <code>Client ID</code> dengan <code>npm run setup:unpacked -- --client-id &lt;CLIENT_ID&gt;</code>, lalu jalankan <code>npm run package:unpacked</code>.
         </p>
       </section>
 
@@ -47,9 +56,9 @@
         </label>
 
         <div class="row">
-          <button id="btn-save" class="btn">Simpan Pengaturan</button>
+          <button id="btn-save" type="button" class="btn">Simpan Pengaturan</button>
           <button id="btn-clear" class="btn btn-danger" type="button">Hapus Data Lokal</button>
-          <span id="save-status" class="status"></span>
+          <span id="save-status" class="status" role="status" aria-live="polite"></span>
         </div>
       </section>
     </main>

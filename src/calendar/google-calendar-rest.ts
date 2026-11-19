@@ -10,9 +10,14 @@ const SPADA_SOURCE_TAG = "spada-upnyk-sync";
 export class GoogleCalendarApiError extends Error {
   constructor(
     public readonly status: number,
-    message: string
+    detail: string,
+    public readonly reason?: string
   ) {
-    super(message);
+    const cleanDetail = detail.trim() || "Unknown Google Calendar API error";
+    const formattedMessage = reason
+      ? `GCAL HTTP ${status} [${reason}]: ${cleanDetail}`
+      : `GCAL HTTP ${status}: ${cleanDetail}`;
+    super(formattedMessage);
     this.name = "GoogleCalendarApiError";
   }
 }
@@ -83,13 +88,40 @@ interface GoogleEventsListResponse {
   nextPageToken?: string;
 }
 
-async function parseErrorResponse(res: Response): Promise<string> {
+interface GoogleApiErrorBody {
+  error?: {
+    message?: string;
+    errors?: Array<{ reason?: string; message?: string }>;
+  };
+}
+
+async function parseErrorResponse(res: Response): Promise<{ detail: string; reason?: string }> {
+  let text = "";
   try {
-    const text = await res.text();
-    return text || res.statusText;
+    text = (await res.text()).trim();
   } catch {
-    return res.statusText;
+    return { detail: res.statusText || "Unknown error" };
   }
+
+  if (!text) {
+    return { detail: res.statusText || "Unknown error" };
+  }
+
+  try {
+    const parsed = JSON.parse(text) as GoogleApiErrorBody;
+    const reason = parsed?.error?.errors?.[0]?.reason;
+    const message = parsed?.error?.message ?? parsed?.error?.errors?.[0]?.message;
+    if (message || reason) {
+      return {
+        detail: message ?? text,
+        reason: typeof reason === "string" && reason.trim() ? reason.trim() : undefined,
+      };
+    }
+  } catch {
+    // Plain-text or HTML error body; fall back to raw text
+  }
+
+  return { detail: text };
 }
 
 export async function listRemoteSpadaEvents(
@@ -119,7 +151,8 @@ export async function listRemoteSpadaEvents(
     });
 
     if (!res.ok) {
-      throw new GoogleCalendarApiError(res.status, await parseErrorResponse(res));
+      const parsed = await parseErrorResponse(res);
+      throw new GoogleCalendarApiError(res.status, parsed.detail, parsed.reason);
     }
 
     const data = (await res.json()) as GoogleEventsListResponse;
@@ -162,7 +195,8 @@ export async function createRemoteEvent(
   });
 
   if (!res.ok) {
-    throw new GoogleCalendarApiError(res.status, await parseErrorResponse(res));
+    const parsed = await parseErrorResponse(res);
+    throw new GoogleCalendarApiError(res.status, parsed.detail, parsed.reason);
   }
 
   const data = (await res.json()) as { id?: string };
@@ -188,6 +222,7 @@ export async function patchRemoteEvent(
   });
 
   if (!res.ok) {
-    throw new GoogleCalendarApiError(res.status, await parseErrorResponse(res));
+    const parsed = await parseErrorResponse(res);
+    throw new GoogleCalendarApiError(res.status, parsed.detail, parsed.reason);
   }
 }

@@ -1,4 +1,5 @@
 import type { ScannedAssignment } from "../parsers/spada-html.js";
+import { diagnoseSetupError, evaluateSetupStatus } from "../setup/setup-diagnostics.js";
 import type { StoredExtensionState } from "../shared/storage.js";
 import { formatWibDateTime } from "../sync/formatter-and-diff.js";
 
@@ -14,6 +15,9 @@ let cachedState: StoredExtensionState | null = null;
 let cachedOAuthConfigured = false;
 
 const metaLine = document.getElementById("meta-line") as HTMLParagraphElement;
+const setupBanner = document.getElementById("setup-banner") as HTMLElement;
+const setupBannerText = document.getElementById("setup-banner-text") as HTMLSpanElement;
+const btnSetupGuide = document.getElementById("btn-setup-guide") as HTMLButtonElement;
 const alertBox = document.getElementById("alert-box") as HTMLElement;
 const btnOptions = document.getElementById("btn-options") as HTMLButtonElement;
 const btnScan = document.getElementById("btn-scan") as HTMLButtonElement;
@@ -87,13 +91,25 @@ function render(): void {
     metaLine.textContent = "Klik 'Scan SPADA' setelah login di SPADA";
   }
 
+  const setupStatus = evaluateSetupStatus(cachedState, cachedOAuthConfigured);
+  const isGoogleConnected = cachedState.googleConnected && cachedState.googleAuthVerified;
+
+  if (!setupStatus.hasCompletedInitialSetup) {
+    setupBanner.classList.remove("hidden");
+    setupBannerText.textContent = `Setup awal: ${setupStatus.completedCount}/3 langkah selesai`;
+  } else {
+    setupBanner.classList.add("hidden");
+  }
+
   if (cachedState.lastScanError) {
-    showAlert(cachedState.lastScanError, true);
+    const diag = diagnoseSetupError(cachedState.lastScanError);
+    showAlert(`${diag.title} — ${diag.hint}`, true);
   } else if (cachedState.lastSyncError) {
-    showAlert(cachedState.lastSyncError, true);
+    const diag = diagnoseSetupError(cachedState.lastSyncError);
+    showAlert(`${diag.title} — ${diag.hint}`, true);
   } else if (!cachedOAuthConfigured) {
     showAlert(
-      "Mode Scan SPADA siap dipakai! Untuk mengaktifkan sync ke Google Calendar, isi oauth2.client_id di manifest.json (lihat Pengaturan ⚙️).",
+      "Mode Scan SPADA siap dipakai! Untuk mengaktifkan sync ke Google Calendar, konfigurasikan OAuth Google terlebih dahulu (lihat Panduan Setup).",
       false
     );
   } else {
@@ -103,7 +119,7 @@ function render(): void {
   if (!cachedOAuthConfigured) {
     syncStatusEl.textContent = "Google OAuth belum dikonfigurasi";
     btnConnect.textContent = "Panduan Setup";
-  } else if (cachedState.googleConnected) {
+  } else if (isGoogleConnected) {
     const summary = cachedState.lastSyncSummary;
     syncStatusEl.textContent = summary
       ? `Terhubung • +${summary.created} baru, ~${summary.updated} update, ${summary.skipped} skip`
@@ -138,13 +154,24 @@ async function sendAction(type: string): Promise<void> {
   btnSync.disabled = true;
   btnConnect.disabled = true;
   try {
-    const res = (await chrome.runtime.sendMessage({ type })) as WorkerResponse;
+    const res = (await chrome.runtime.sendMessage({ type })) as WorkerResponse | undefined;
+    if (!res || !res.state) {
+      showAlert(
+        "Koneksi ke background ekstensi terputus — tutup lalu buka kembali popup dan coba lagi.",
+        true
+      );
+      return;
+    }
     cachedState = res.state;
     cachedOAuthConfigured = res.oauthConfigured;
-    if (!res.ok && res.error) {
-      showAlert(res.error, true);
-    }
     render();
+    if (!res.ok && res.error) {
+      const diag = diagnoseSetupError(res.error);
+      showAlert(`${diag.title} — ${diag.hint}`, true);
+    }
+  } catch (err) {
+    const diag = diagnoseSetupError(err instanceof Error ? err.message : String(err));
+    showAlert(`${diag.title} — ${diag.hint}`, true);
   } finally {
     btnScan.disabled = false;
     btnSync.disabled = false;
@@ -152,8 +179,18 @@ async function sendAction(type: string): Promise<void> {
   }
 }
 
+function openOnboardingPage(): void {
+  void chrome.tabs.create({
+    url: chrome.runtime.getURL("onboarding/onboarding.html"),
+  });
+}
+
 btnOptions.addEventListener("click", () => {
   void chrome.runtime.openOptionsPage();
+});
+
+btnSetupGuide.addEventListener("click", () => {
+  openOnboardingPage();
 });
 
 btnScan.addEventListener("click", () => {
@@ -166,10 +203,13 @@ btnSync.addEventListener("click", () => {
 
 btnConnect.addEventListener("click", () => {
   if (!cachedOAuthConfigured) {
-    void chrome.runtime.openOptionsPage();
+    openOnboardingPage();
     return;
   }
-  const action = cachedState?.googleConnected ? "DISCONNECT_GOOGLE" : "CONNECT_GOOGLE";
+  const isGoogleConnected = Boolean(
+    cachedState?.googleConnected && cachedState?.googleAuthVerified
+  );
+  const action = isGoogleConnected ? "DISCONNECT_GOOGLE" : "CONNECT_GOOGLE";
   void sendAction(action);
 });
 

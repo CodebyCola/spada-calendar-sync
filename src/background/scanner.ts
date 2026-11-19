@@ -5,6 +5,7 @@ import {
   patchRemoteEvent,
 } from "../calendar/google-calendar-rest.js";
 import {
+  isAuthenticatedSpadaDashboardHtml,
   isSpadaLoginHtml,
   parseAssignIndexHtml,
   parseEnrolledCoursesHtml,
@@ -65,13 +66,17 @@ export async function scanSpadaWithFetcher(
   seedCourses?: SpadaCourse[]
 ): Promise<ScanResult> {
   let courses = seedCourses && seedCourses.length > 0 ? seedCourses : [];
+  let myHtml = "";
 
   if (courses.length === 0) {
-    const myHtml = await fetchSpadaPage(SPADA_MY_URL, fetchImpl);
+    myHtml = await fetchSpadaPage(SPADA_MY_URL, fetchImpl);
     courses = parseEnrolledCoursesHtml(myHtml);
   }
 
   if (courses.length === 0) {
+    if (isAuthenticatedSpadaDashboardHtml(myHtml)) {
+      return { courses: [], assignments: [] };
+    }
     throw new Error(
       "AUTH_REQUIRED: Tidak menemukan daftar kursus aktif. Pastikan kamu sudah login di SPADA."
     );
@@ -98,10 +103,21 @@ export async function scanSpadaWithFetcher(
   };
 }
 
+export function isConfiguredOAuthClientId(clientId: string): boolean {
+  const trimmed = clientId.trim();
+  if (!trimmed || /\s/.test(trimmed)) {
+    return false;
+  }
+  if (/^YOUR_.*CLIENT_ID/i.test(trimmed)) {
+    return false;
+  }
+  return trimmed.endsWith(".apps.googleusercontent.com");
+}
+
 export function isOAuthClientConfigured(): boolean {
   const manifest = chrome.runtime.getManifest();
   const clientId = manifest.oauth2?.client_id ?? "";
-  return Boolean(clientId) && !clientId.startsWith("YOUR_CHROME_EXTENSION_CLIENT_ID");
+  return isConfiguredOAuthClientId(clientId);
 }
 
 async function getGoogleToken(interactive: boolean): Promise<string> {
@@ -121,11 +137,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export interface SyncTokenDependencies {
+  getToken?: (interactive: boolean) => Promise<string>;
+  removeCachedToken?: (token: string) => Promise<void>;
+}
+
 export async function syncAssignmentsToGoogleCalendar(
   assignments: ScannedAssignment[],
   settings: ExtensionSettings,
-  interactive: boolean
+  interactive: boolean,
+  deps?: SyncTokenDependencies
 ): Promise<SyncSummary> {
+  const getToken = deps?.getToken ?? getGoogleToken;
+  const removeCachedToken =
+    deps?.removeCachedToken ??
+    (async (token: string) => {
+      await chrome.identity.removeCachedAuthToken({ token });
+    });
+
+  // Always establish/verify Google authorization before reporting sync completion,
+  // even when there are currently 0 eligible assignments to sync.
+  const token = await getToken(interactive);
+
   const syncable = filterSyncableAssignments(assignments, {
     includePastAssignments: settings.includePastAssignments,
     syncSubmitted: settings.syncSubmitted,
@@ -137,18 +170,18 @@ export async function syncAssignmentsToGoogleCalendar(
 
   const formattedEvents = await Promise.all(syncable.map(formatScannedAssignment));
 
-  const executeWithToken = async (token: string): Promise<SyncSummary> => {
-    const remoteEvents = await listRemoteSpadaEvents(token, settings.calendarId);
+  const executeWithToken = async (accessToken: string): Promise<SyncSummary> => {
+    const remoteEvents = await listRemoteSpadaEvents(accessToken, settings.calendarId);
     const plan = computeExtensionSyncPlan(formattedEvents, remoteEvents);
 
     for (const item of plan.toCreate) {
-      await createRemoteEvent(token, settings.calendarId, item);
+      await createRemoteEvent(accessToken, settings.calendarId, item);
       await sleep(GOOGLE_WRITE_DELAY_MS);
     }
 
     for (const item of plan.toUpdate) {
       await patchRemoteEvent(
-        token,
+        accessToken,
         settings.calendarId,
         item.googleEventId,
         item.event,
@@ -164,13 +197,12 @@ export async function syncAssignmentsToGoogleCalendar(
     };
   };
 
-  const token = await getGoogleToken(interactive);
   try {
     return await executeWithToken(token);
   } catch (err) {
     if (err instanceof GoogleCalendarApiError && err.status === 401) {
-      await chrome.identity.removeCachedAuthToken({ token });
-      const freshToken = await getGoogleToken(interactive);
+      await removeCachedToken(token);
+      const freshToken = await getToken(interactive);
       return await executeWithToken(freshToken);
     }
     throw err;

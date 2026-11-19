@@ -71,6 +71,29 @@ body {
   display: none;
 }
 
+.setup-banner {
+  margin: 10px 12px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #dbeafe;
+  color: #1e3a8a;
+  border: 1px solid #93c5fd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.setup-banner.hidden {
+  display: none;
+}
+
+:where(a:any-link, button):focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

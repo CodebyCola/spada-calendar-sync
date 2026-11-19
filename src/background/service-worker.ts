@@ -1,5 +1,11 @@
 import type { SpadaCourse } from "../parsers/spada-html.js";
-import { getStoredState, updateStoredState } from "../shared/storage.js";
+import { getStoredState, updateStoredState, type StoredExtensionState } from "../shared/storage.js";
+import {
+  buildDisconnectedStatePatch,
+  countPendingAssignments,
+  handleExtensionInstalled,
+  revalidateLegacyGoogleAuth,
+} from "./install-lifecycle.js";
 import {
   isOAuthClientConfigured,
   scanSpadaWithFetcher,
@@ -26,15 +32,17 @@ async function updateActionBadge(pendingCount: number): Promise<void> {
   }
 }
 
-function countPendingAssignments(
-  assignments: Array<{ submitted: boolean; dueDateIso: string | null }>
-): number {
-  const nowMinusOneDay = Date.now() - 24 * 60 * 60 * 1000;
-  return assignments.filter((a) => {
-    if (a.submitted) return false;
-    if (!a.dueDateIso) return true;
-    return Date.parse(a.dueDateIso) >= nowMinusOneDay;
-  }).length;
+async function revalidateStateIfNeeded(
+  state: StoredExtensionState
+): Promise<StoredExtensionState> {
+  return revalidateLegacyGoogleAuth(state, {
+    oauthConfigured: isOAuthClientConfigured(),
+    getSilentToken: async () => {
+      const result = await chrome.identity.getAuthToken({ interactive: false });
+      return result.token ?? null;
+    },
+    updateState: updateStoredState,
+  });
 }
 
 async function performScan(seedCourses?: SpadaCourse[]): Promise<void> {
@@ -66,6 +74,7 @@ async function performSync(interactive: boolean): Promise<void> {
     );
     await updateStoredState({
       googleConnected: true,
+      googleAuthVerified: true,
       lastSyncAt: new Date().toISOString(),
       lastSyncSummary: summary,
       lastSyncError: null,
@@ -79,20 +88,30 @@ async function performSync(interactive: boolean): Promise<void> {
   }
 }
 
-chrome.runtime.onInstalled.addListener(async () => {
-  await chrome.alarms.create(AUTO_SCAN_ALARM, {
-    periodInMinutes: AUTO_SCAN_PERIOD_MINUTES,
+chrome.runtime.onInstalled.addListener(async (details) => {
+  await handleExtensionInstalled(details.reason, {
+    scheduleAutoScan: async () => {
+      await chrome.alarms.create(AUTO_SCAN_ALARM, {
+        periodInMinutes: AUTO_SCAN_PERIOD_MINUTES,
+      });
+    },
+    getState: getStoredState,
+    updateBadge: updateActionBadge,
+    openOnboardingTab: async () => {
+      await chrome.tabs.create({
+        url: chrome.runtime.getURL("onboarding/onboarding.html"),
+      });
+    },
+    revalidateAuth: revalidateStateIfNeeded,
   });
-  const state = await getStoredState();
-  await updateActionBadge(countPendingAssignments(state.assignments));
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== AUTO_SCAN_ALARM) return;
   try {
     await performScan();
-    const state = await getStoredState();
-    if (state.googleConnected && isOAuthClientConfigured()) {
+    const state = await revalidateStateIfNeeded(await getStoredState());
+    if (state.googleConnected && state.googleAuthVerified && isOAuthClientConfigured()) {
       await performSync(false);
     }
   } catch (err) {
@@ -104,7 +123,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   (async () => {
     try {
       if (message.type === "GET_STATE") {
-        const state = await getStoredState();
+        const state = await revalidateStateIfNeeded(await getStoredState());
         sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
         return;
       }
@@ -117,21 +136,28 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       }
 
       if (message.type === "CONNECT_GOOGLE") {
-        if (!isOAuthClientConfigured()) {
-          throw new Error(
-            "OAUTH_NOT_CONFIGURED: Isi oauth2.client_id di manifest.json dulu sebelum menghubungkan Google."
-          );
+        try {
+          if (!isOAuthClientConfigured()) {
+            throw new Error(
+              "OAUTH_NOT_CONFIGURED: Isi oauth2.client_id di manifest.json dulu sebelum menghubungkan Google."
+            );
+          }
+          const tokenRes = await chrome.identity.getAuthToken({ interactive: true });
+          if (!tokenRes.token) {
+            throw new Error("Gagal menghubungkan akun Google.");
+          }
+          const state = await updateStoredState({
+            googleConnected: true,
+            googleAuthVerified: true,
+            lastSyncError: null,
+          });
+          sendResponse({ ok: true, state, oauthConfigured: true });
+          return;
+        } catch (err) {
+          const messageText = err instanceof Error ? err.message : String(err);
+          await updateStoredState({ lastSyncError: messageText });
+          throw err;
         }
-        const tokenRes = await chrome.identity.getAuthToken({ interactive: true });
-        if (!tokenRes.token) {
-          throw new Error("Gagal menghubungkan akun Google.");
-        }
-        const state = await updateStoredState({
-          googleConnected: true,
-          lastSyncError: null,
-        });
-        sendResponse({ ok: true, state, oauthConfigured: true });
-        return;
       }
 
       if (message.type === "DISCONNECT_GOOGLE") {
@@ -144,10 +170,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
         } catch {
           // Ignore if no token is cached
         }
-        const state = await updateStoredState({
-          googleConnected: false,
-          lastSyncError: null,
-        });
+        const state = await updateStoredState(buildDisconnectedStatePatch());
         sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
         return;
       }
@@ -172,8 +195,8 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
           return;
         }
         await performScan(message.courses);
-        const updated = await getStoredState();
-        if (updated.googleConnected && isOAuthClientConfigured()) {
+        const updated = await revalidateStateIfNeeded(await getStoredState());
+        if (updated.googleConnected && updated.googleAuthVerified && isOAuthClientConfigured()) {
           await performSync(false);
         }
         sendResponse({ ok: true });

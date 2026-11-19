@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  GoogleCalendarApiError,
   listRemoteSpadaEvents,
   toGoogleCalendarPayload,
 } from "../src/calendar/google-calendar-rest.js";
@@ -118,5 +119,50 @@ describe("listRemoteSpadaEvents", () => {
     expect(calls).toBe(2);
     expect(events).toHaveLength(2);
     expect(events[1]!.spadaUid).toBe("assign-2@spada.upnyk.ac.id");
+  });
+
+  it("Preserves service, HTTP status, and Google error reason in GoogleCalendarApiError message", async () => {
+    const rateLimitFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 403,
+            message: "Rate Limit Exceeded",
+            errors: [{ domain: "usageLimits", reason: "rateLimitExceeded", message: "Rate Limit Exceeded" }],
+          },
+        }),
+        { status: 403, statusText: "Forbidden" }
+      );
+
+    let caught: unknown;
+    try {
+      await listRemoteSpadaEvents("fake_token", "primary", rateLimitFetch);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(GoogleCalendarApiError);
+    const apiErr = caught as GoogleCalendarApiError;
+    expect(apiErr.status).toBe(403);
+    expect(apiErr.reason).toBe("rateLimitExceeded");
+    expect(apiErr.message).toBe("GCAL HTTP 403 [rateLimitExceeded]: Rate Limit Exceeded");
+  });
+
+  it("Falls back cleanly without JSON SyntaxError for plain-text error responses", async () => {
+    const gatewayFetch: typeof fetch = async () =>
+      new Response("Bad Gateway", { status: 502, statusText: "Bad Gateway" });
+
+    let caught: unknown;
+    try {
+      await listRemoteSpadaEvents("fake_token", "primary", gatewayFetch);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(GoogleCalendarApiError);
+    const apiErr = caught as GoogleCalendarApiError;
+    expect(apiErr.status).toBe(502);
+    expect(apiErr.reason).toBeUndefined();
+    expect(apiErr.message).toBe("GCAL HTTP 502: Bad Gateway");
   });
 });

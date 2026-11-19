@@ -49,4 +49,55 @@ describe("validateManifestForStore", () => {
     const strictResult = validateManifestForStore(withPlaceholder, { strictOAuth: true });
     expect(strictResult.errors.some((e) => /client_id/i.test(e))).toBe(true);
   });
+
+  it("Requires valid base64 key and checks unpacked placeholder client_id when target is unpacked", () => {
+    const missingKey = validateManifestForStore(VALID_MANIFEST, {
+      target: "unpacked",
+      strictOAuth: true,
+    });
+    expect(missingKey.errors.some((e) => /key/i.test(e))).toBe(true);
+
+    const invalidKey = validateManifestForStore(
+      { ...VALID_MANIFEST, key: "not!valid@base64" },
+      { target: "unpacked", strictOAuth: true }
+    );
+    expect(invalidKey.errors.some((e) => /key|base64/i.test(e))).toBe(true);
+
+    const validUnpacked = validateManifestForStore(
+      { ...VALID_MANIFEST, key: "aGVsbG8=" },
+      { target: "unpacked", strictOAuth: true }
+    );
+    expect(validUnpacked.errors).toEqual([]);
+    expect(validUnpacked.warnings).toEqual([]);
+
+    const unpackedPlaceholder = {
+      ...VALID_MANIFEST,
+      key: "aGVsbG8=",
+      oauth2: {
+        client_id: "YOUR_UNPACKED_CLIENT_ID.apps.googleusercontent.com",
+        scopes: ["https://www.googleapis.com/auth/calendar.events"],
+      },
+    };
+    const devUnpacked = validateManifestForStore(unpackedPlaceholder, {
+      target: "unpacked",
+      strictOAuth: false,
+    });
+    expect(devUnpacked.errors).toEqual([]);
+    expect(devUnpacked.warnings.some((w) => /client_id/i.test(w))).toBe(true);
+
+    const strictUnpacked = validateManifestForStore(unpackedPlaceholder, {
+      target: "unpacked",
+      strictOAuth: true,
+    });
+    expect(strictUnpacked.errors.some((e) => /client_id/i.test(e))).toBe(true);
+  });
+
+  it("Rejects store manifest reusing a disallowed unpacked client_id", () => {
+    const result = validateManifestForStore(VALID_MANIFEST, {
+      target: "store",
+      strictOAuth: true,
+      disallowedClientIds: ["1234567890-abc.apps.googleusercontent.com"],
+    });
+    expect(result.errors.some((e) => /unpacked|disallowed|client_id/i.test(e))).toBe(true);
+  });
 });

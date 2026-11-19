@@ -94,6 +94,21 @@ export function isSpadaLoginHtml(html: string): boolean {
 }
 
 /**
+ * Checks whether fetched SPADA HTML belongs to an authenticated Moodle session
+ * even when the student has zero active courses on the dashboard.
+ */
+export function isAuthenticatedSpadaDashboardHtml(html: string): boolean {
+  if (isSpadaLoginHtml(html)) {
+    return false;
+  }
+  return (
+    /id=["']nav-drawer["']/i.test(html) ||
+    /\/login\/logout\.php/i.test(html) ||
+    /["']sesskey["']\s*:\s*["'][^"']+["']|sesskey=[A-Za-z0-9]+/i.test(html)
+  );
+}
+
+/**
  * Extracts active semester courses exclusively from Moodle's `#nav-drawer` sidebar.
  */
 export function parseEnrolledCoursesHtml(html: string): SpadaCourse[] {

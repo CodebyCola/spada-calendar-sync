@@ -12,26 +12,31 @@
         <h1>SPADA Scanner</h1>
         <p id="meta-line" class="meta">Belum pernah dipindai</p>
       </div>
-      <button id="btn-options" class="icon-btn" title="Pengaturan &amp; Info Extension ID">⚙️</button>
+      <button id="btn-options" type="button" class="icon-btn" aria-label="Pengaturan" title="Pengaturan &amp; Info Extension ID">⚙️</button>
     </header>
 
-    <section id="alert-box" class="alert hidden"></section>
+    <section id="setup-banner" class="setup-banner hidden">
+      <span id="setup-banner-text">Setup belum selesai</span>
+      <button id="btn-setup-guide" type="button" class="link-btn">Panduan Setup</button>
+    </section>
+
+    <section id="alert-box" class="alert hidden" role="alert"></section>
 
     <section class="actions">
-      <button id="btn-scan" class="btn btn-primary">🔍 Scan SPADA</button>
-      <button id="btn-sync" class="btn btn-secondary">📅 Sync ke Calendar</button>
+      <button id="btn-scan" type="button" class="btn btn-primary">🔍 Scan SPADA</button>
+      <button id="btn-sync" type="button" class="btn btn-secondary">📅 Sync ke Calendar</button>
     </section>
 
     <section class="tabs">
-      <button id="tab-pending" class="tab active">Belum Dikumpulkan (<span id="count-pending">0</span>)</button>
-      <button id="tab-all" class="tab">Semua Tugas (<span id="count-all">0</span>)</button>
+      <button id="tab-pending" type="button" class="tab active">Belum Dikumpulkan (<span id="count-pending">0</span>)</button>
+      <button id="tab-all" type="button" class="tab">Semua Tugas (<span id="count-all">0</span>)</button>
     </section>
 
     <main id="assignment-list" class="list"></main>
 
     <footer class="footer">
       <span id="sync-status">Google Calendar: belum terhubung</span>
-      <button id="btn-connect" class="link-btn">Hubungkan</button>
+      <button id="btn-connect" type="button" class="link-btn">Hubungkan</button>
     </footer>
 
     <script type="module" src="popup.js"></script>

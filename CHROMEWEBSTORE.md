@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — SPADA UPNYK Assignment Scanner
 
-> Last Updated: 2026-11-18
+> Last Updated: 2026-11-19
 
 ## Store Listing
 
@@ -21,12 +21,13 @@ FEATURES
 • Submission Status Tracking — Clearly separates pending tasks from submitted assignments and displays a pending task counter on the toolbar icon.
 • Google Calendar Sync — Sends assignment deadlines to your Google Calendar in Asia/Jakarta (WIB) time with H-1 day and H-3 hour popup reminders.
 • Duplicate Prevention — Automatically updates existing calendar events when you submit an assignment (marking it as completed) without creating duplicates.
+• Guided First-Run Setup — Opens a 3-step onboarding checklist on fresh install with clear error diagnostics so students can verify SPADA sign-in and connect Google Calendar in under a minute.
 • Automatic Periodic Refresh — Checks for new assignments while you browse SPADA or on a 3-hour schedule while Chrome is open.
 
 HOW TO USE
-1. Sign in to https://spada.upnyk.ac.id in Chrome.
-2. Click the extension icon and press "Scan SPADA" to view all active assignments and their submission statuses.
-3. Click "Hubungkan Google" and "Sync ke Calendar" to add deadlines to your Google Calendar automatically.
+1. After installing, follow the 3-step Setup Guide that opens automatically (or open it anytime from the extension popup/Options).
+2. Sign in to https://spada.upnyk.ac.id in Chrome and verify your SPADA session.
+3. Click "Hubungkan Google" and "Scan & Sync Pertama" to add deadlines to your Google Calendar automatically.
 
 PRIVACY
 All scanning runs locally in your browser using your existing SPADA session. Your SPADA username and password are never accessed, stored, or sent to any server. You can clear all local extension data anytime from the Options page.
@@ -107,6 +108,6 @@ Host `docs/privacy.html` (or `PRIVACY.md`) publicly via GitHub Pages (e.g., `htt
 
 1. Replace `<YOUR_CONTACT_EMAIL>` and `<YOUR_GITHUB_REPO_URL>` in `PRIVACY.md`, `docs/privacy.html`, and `CHROMEWEBSTORE.md`, then publish `docs/privacy.html` (e.g. via GitHub Pages).
 2. Capture at least 1 real `1280×800` screenshot of the extension popup over SPADA in Chrome.
-3. Update `public/manifest.json` `oauth2.client_id` with your Chrome Extension OAuth Client ID (and ensure no `"key"` field is in `manifest.json`).
+3. Update `public/manifest.json` `oauth2.client_id` with your dedicated **Chrome Web Store Item ID** OAuth Client ID (do NOT reuse the local unpacked Client ID from `config/unpacked-oauth.json`, and ensure no `"key"` field is in `manifest.json`).
 4. Run `npm test && npm run typecheck && npm run package:strict` to produce `release/spada-calendar-extension-v1.0.0.zip`.
-5. Upload `release/spada-calendar-extension-v1.0.0.zip` in the Chrome Developer Dashboard; once approved/assigned your permanent Store Extension ID, create the matching OAuth Client ID for that Store ID if needed and publish your Google Cloud OAuth Consent Screen to **Production** so all UPNYK students can sign in.
+5. Upload `release/spada-calendar-extension-v1.0.0.zip` in the Chrome Developer Dashboard; install the Store build (unlisted/testing) and **verify Google Sign-in ("Hubungkan Google") succeeds from the Store installation** before publishing to Production (and publish your Google Cloud OAuth Consent Screen to **Production** so all UPNYK students can sign in).

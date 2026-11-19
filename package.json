@@ -4,13 +4,16 @@
   "description": "Chrome Extension (MV3) to scan all SPADA UPNYK assignments (including ones missing from Moodle .ics) and sync them to Google Calendar",
   "type": "module",
   "scripts": {
+    "setup:unpacked": "node scripts/setup-unpacked.mjs",
     "build": "node scripts/build.mjs",
+    "build:unpacked": "node scripts/build.mjs --target=unpacked",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "icons": "node scripts/generate-icons.mjs",
     "promo": "node scripts/generate-promo.mjs",
     "package": "node scripts/package.mjs",
-    "package:strict": "node scripts/package.mjs --strict"
+    "package:strict": "node scripts/package.mjs --strict",
+    "package:unpacked": "node scripts/package.mjs --target=unpacked"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Panduan Setup — SPADA UPNYK Assignment Scanner</title>
+    <link rel="stylesheet" href="onboarding.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div class="hero-top">
+          <div>
+            <h1>Setup Cepat SPADA Scanner</h1>
+            <p class="subtitle">
+              Hubungkan tugas SPADA UPNYK ke Google Calendar milikmu sendiri dalam 3 langkah.
+            </p>
+          </div>
+          <span id="progress-pill" class="progress-pill" aria-live="polite">0/3 selesai</span>
+        </div>
+        <div id="ready-banner" class="ready-banner" hidden role="status" aria-live="polite">
+          Semua langkah selesai! Ekstensi siap memindai dan menyinkronkan tugas SPADA-mu secara otomatis.
+        </div>
+        <div id="global-error" class="error-banner" hidden role="alert"></div>
+      </header>
+
+      <main>
+        <ol class="steps">
+          <li id="step-spada" class="step-card" data-state="active">
+            <div class="step-header">
+              <div class="step-title-group">
+                <span class="step-number" aria-hidden="true">1</span>
+                <h2>Login ke SPADA UPNYK</h2>
+              </div>
+              <span id="badge-spada" class="badge">Aktif</span>
+            </div>
+            <p class="step-desc">
+              Buka SPADA di Chrome dan login dengan akun mahasiswamu seperti biasa, lalu klik tombol cek di bawah.
+            </p>
+            <div class="step-actions">
+              <a
+                class="btn btn-secondary"
+                href="https://spada.upnyk.ac.id/my/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Buka SPADA ↗
+              </a>
+              <button id="btn-check-spada" type="button" class="btn btn-primary">
+                Cek Sesi SPADA
+              </button>
+            </div>
+            <p id="detail-spada" class="step-detail"></p>
+          </li>
+
+          <li id="step-google" class="step-card" data-state="pending">
+            <div class="step-header">
+              <div class="step-title-group">
+                <span class="step-number" aria-hidden="true">2</span>
+                <h2>Hubungkan Google Calendar</h2>
+              </div>
+              <span id="badge-google" class="badge">Menunggu</span>
+            </div>
+            <p class="step-desc">
+              Klik satu tombol di bawah dan pilih akun Google milikmu. Jadwal tugas otomatis masuk ke kalendermu sendiri.
+            </p>
+            <div class="step-actions">
+              <button id="btn-connect-google" type="button" class="btn btn-primary">
+                Hubungkan Google
+              </button>
+            </div>
+            <p class="tip-box" data-unpacked-only>
+              <strong>Info:</strong> Jika Google menampilkan layar peringatan
+              <em>"Google hasn't verified this app"</em>, klik <strong>Advanced</strong> lalu pilih
+              <strong>Go to SPADA UPNYK Assignment Scanner</strong> untuk melanjutkan.
+            </p>
+            <p id="detail-google" class="step-detail"></p>
+          </li>
+
+          <li id="step-sync" class="step-card" data-state="pending">
+            <div class="step-header">
+              <div class="step-title-group">
+                <span class="step-number" aria-hidden="true">3</span>
+                <h2>Sinkronisasi Pertama</h2>
+              </div>
+              <span id="badge-sync" class="badge">Menunggu</span>
+            </div>
+            <p class="step-desc">
+              Kirim seluruh tenggat tugas aktif dari SPADA ke Google Calendar dengan pengingat H-1 hari &amp; H-3 jam.
+            </p>
+            <div class="step-actions">
+              <button
+                id="btn-first-sync"
+                type="button"
+                class="btn btn-primary"
+                aria-describedby="detail-sync"
+                disabled
+              >
+                Scan &amp; Sync Pertama
+              </button>
+            </div>
+            <p id="detail-sync" class="step-detail"></p>
+          </li>
+        </ol>
+
+        <aside class="tips-panel" aria-labelledby="tips-heading">
+          <h2 id="tips-heading">Tips Penting</h2>
+          <ul class="tips-list">
+            <li>
+              Klik ikon puzzle (🧩) di pojok kanan atas Chrome lalu <strong>Pin</strong> ekstensi ini agar mudah dibuka kapan saja.
+            </li>
+            <li data-unpacked-only>
+              <strong>Jangan hapus folder hasil ekstrak ekstensi ini</strong> dari laptopmu — Chrome membaca file ekstensi langsung dari folder tersebut.
+            </li>
+            <li>
+              Ingin mengubah kalender tujuan atau pengaturan scan otomatis?
+              <button id="btn-open-options" type="button" class="link-btn">Buka Pengaturan ⚙️</button>
+            </li>
+          </ul>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="onboarding.js"></script>
+  </body>
+</html>
