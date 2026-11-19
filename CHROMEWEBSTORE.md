@@ -39,7 +39,7 @@ PERMISSIONS
 • "identity" — Needed to sign in with Google and authorize Google Calendar access.
 
 SUPPORT
-Questions, bug reports, or suggestions: <YOUR_CONTACT_EMAIL> or <YOUR_GITHUB_REPO_URL>
+Questions, bug reports, or suggestions: <YOUR_CONTACT_EMAIL> or https://github.com/CodebyCola/spada-calendar-sync
 
 Version 1.0.0 — Initial release with active-course assignment scanning, submission status tracking, and Google Calendar sync.
 ```
@@ -106,7 +106,7 @@ Host `docs/privacy.html` (or `PRIVACY.md`) publicly via GitHub Pages (e.g., `htt
 
 ## Pre-Publish Submission Checklist
 
-1. Replace `<YOUR_CONTACT_EMAIL>` and `<YOUR_GITHUB_REPO_URL>` in `PRIVACY.md`, `docs/privacy.html`, and `CHROMEWEBSTORE.md`, then publish `docs/privacy.html` (e.g. via GitHub Pages).
+1. Replace `<YOUR_CONTACT_EMAIL>` in `PRIVACY.md`, `docs/privacy.html`, and `CHROMEWEBSTORE.md`, then publish `docs/privacy.html` (e.g. via GitHub Pages).
 2. Capture at least 1 real `1280×800` screenshot of the extension popup over SPADA in Chrome.
 3. Update `public/manifest.json` `oauth2.client_id` with your dedicated **Chrome Web Store Item ID** OAuth Client ID (do NOT reuse the local unpacked Client ID from `config/unpacked-oauth.json`, and ensure no `"key"` field is in `manifest.json`).
 4. Run `npm test && npm run typecheck && npm run package:strict` to produce `release/spada-calendar-extension-v1.0.0.zip`.

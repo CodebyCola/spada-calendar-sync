@@ -38,4 +38,4 @@ If our data practices change in future versions, this policy will be updated wit
 
 ## 6. Contact
 
-For privacy questions or support, please contact `<YOUR_CONTACT_EMAIL>` or open an issue on the project's GitHub repository (`<YOUR_GITHUB_REPO_URL>`).
+For privacy questions or support, please contact `<YOUR_CONTACT_EMAIL>` or open an issue on the project's GitHub repository (https://github.com/CodebyCola/spada-calendar-sync).
