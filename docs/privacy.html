@@ -21,7 +21,7 @@
   </head>
   <body>
     <h1>Privacy Policy — SPADA UPNYK Assignment Scanner</h1>
-    <p><strong>Last updated:</strong> 2026-11-18</p>
+    <p><strong>Last updated:</strong> 2026-11-19</p>
     <p>
       <strong>SPADA UPNYK Assignment Scanner</strong> is an unofficial student productivity tool designed to scan active course assignment pages on
       <code>https://spada.upnyk.ac.id/</code> and synchronize assignment deadlines to your personal Google Calendar.
@@ -30,15 +30,15 @@
     <h2>1. What Data Is Accessed and Processed</h2>
     <ul>
       <li><strong>Course &amp; Assignment Content (<code>spada.upnyk.ac.id</code>):</strong> Extracts active course names, assignment titles, due dates, assignment URLs, and submission statuses from your signed-in SPADA session.</li>
-      <li><strong>Preferences &amp; Scan Cache:</strong> Stores your chosen calendar ID, filter settings, and latest scan results locally in your browser.</li>
-      <li><strong>Google OAuth Access Token:</strong> Requested only when you click to connect your Google account, scoped strictly to <code>calendar.events</code>.</li>
+      <li><strong>Preferences &amp; Scan Cache:</strong> Stores your chosen calendar ID, time/status filters, excluded course IDs, reminder presets, event colors, and latest scan results locally in your browser (<code>chrome.storage.local</code>).</li>
+      <li><strong>Google OAuth Access Tokens &amp; Writable Calendar List:</strong> Requests <code>https://www.googleapis.com/auth/calendar.events</code> when you connect/sync to write assignment events to your chosen Google Calendar, and optionally requests <code>https://www.googleapis.com/auth/calendar.calendarlist.readonly</code> in Options to read writable calendar names and IDs on-device for destination selection. Only your chosen calendar ID is stored locally; tokens are never persisted in storage.</li>
     </ul>
     <p>The extension never reads, stores, or transmits your SPADA username, password, or browsing history outside <code>spada.upnyk.ac.id</code>.</p>
 
     <h2>2. How Data Is Stored and Transmitted</h2>
     <p>
-      All scanned data and settings stay locally on your device. No developer-operated server receives your data.
-      When Google Calendar sync is connected, assignment event details are sent directly from your browser to Google's official Calendar API (<code>https://www.googleapis.com/calendar/v3/</code>).
+      All scanned data and preferences (including your selected target calendar ID) stay locally on your device. No developer-operated server receives your data.
+      When Google Calendar sync is connected, assignment event details (titles, deadlines, reminders, color selections, and SPADA links) are sent directly from your browser to Google's official Calendar API (<code>https://www.googleapis.com/calendar/v3/</code>) on your selected Google Calendar. When authorized in Options, writable calendar names and IDs are read directly on-device solely to populate the destination calendar selector.
     </p>
 
     <h2>3. Third-Party Services &amp; Data Sharing</h2>

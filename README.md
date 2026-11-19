@@ -12,10 +12,12 @@ The extension shares event metadata compatibility with the companion CLI tool `s
 ## Core Capabilities
 
 - **Full Course Assignment Scanning:** Fetches active courses and parses each course's `/mod/assign/index.php` table, including empty start-of-semester dashboards without false authentication errors.
-- **Submission Status Tracking:** Separates pending and submitted assignments and displays the pending count on the toolbar badge.
-- **Guided First-Run Onboarding:** Opens a three-step setup checklist automatically on initial installation to verify SPADA authentication, connect Google Calendar, and run the first synchronization.
-- **Service-Aware Error Diagnostics:** Classifies SPADA session errors, SPADA HTTP 403 access errors, Google Calendar rate limits, OAuth consent issues, and unsupported browsers into actionable remediation steps.
-- **Idempotent Google Calendar Sync:** Writes deadlines in `Asia/Jakarta` (WIB) with 24-hour and 3-hour popup reminders, updating existing events automatically upon submission.
+- **View Filtering & Relative WIB Deadlines:** Filter assignments in the popup by course, submission status (`Belum`, `Terkirim`, `Semua`), and local deadline window (`Semua waktu`, `Mendatang`, `Sudah lewat`) without altering background sync rules. Each card shows Asia/Jakarta (WIB) relative countdowns and sync eligibility reasons.
+- **Configurable Sync Filtering & Lifecycle Updates:** Control which assignments create new calendar events by time window (`upcoming_only`, `recent_7d`, `all`), submission status (`pending_only`, `submitted_only`, `all`), and per-course exclusion lists. Existing synced events continue to update (for example from pending to completed) even if their new state falls outside creation filters, without deleting remote events.
+- **Live Sync Candidate Preview:** Displays the global count of create candidates from the latest scan on the Sync button independently of local popup display filters.
+- **Custom Reminders & Event Colors:** Configure up to 5 popup reminder presets (or disable reminders) for pending assignments and assign separate Google Calendar event colors (`colorId`) for pending vs submitted tasks.
+- **Writable Google Calendar Picker & Manual Fallback:** Load writable Google Calendars directly in Options (on explicit consent) or enter a Calendar ID manually, with automatic fallback when offline or when list permission is not granted.
+- **Guided First-Run Onboarding & Service-Aware Diagnostics:** Opens a three-step setup checklist automatically on initial installation and classifies SPADA session errors, HTTP 403/429 issues, OAuth consent issues, and unsupported browsers into actionable remediation steps.
 - **Local-Only Architecture:** Executes entirely within the browser using the user's existing SPADA session. No backend server is used, no SPADA credentials are collected, and no manual refresh token configuration is required.
 
 ---
@@ -78,9 +80,9 @@ The extension shares event metadata compatibility with the companion CLI tool `s
 |---|---|
 | `storage` | Persists scanned assignment summaries, sync state, and user settings locally. |
 | `alarms` | Schedules periodic background scans every 3 hours while Chrome is running. |
-| `identity` | Acquires a Google OAuth 2.0 access token via Chrome sign-in (`calendar.events` scope). |
+| `identity` | Acquires per-operation Google OAuth 2.0 access tokens via Chrome sign-in: `calendar.events` for syncing assignment events, and optional `calendar.calendarlist.readonly` for loading writable calendar names/IDs in Options. |
 | `https://spada.upnyk.ac.id/*` | Reads active course links and `/mod/assign/index.php` tables using the active SPADA session. |
-| `https://www.googleapis.com/*` | Lists, creates, and updates synced assignment events on the user's Google Calendar. |
+| `https://www.googleapis.com/*` | Lists writable calendars on-device for destination selection, and lists, creates, and updates synced assignment events on the user's chosen Google Calendar. |
 
 For full disclosure details, refer to [PRIVACY.md](PRIVACY.md).
 

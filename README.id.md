@@ -12,10 +12,12 @@ Ekstensi ini kompatibel dengan metadata event milik proyek pendamping `spada_cal
 ## Fitur Utama
 
 - **Pemindaian Tugas Menyeluruh:** Mengambil daftar mata kuliah aktif dan memindai tabel `/mod/assign/index.php` di setiap mata kuliah, termasuk menangani dashboard awal semester/KRS yang masih kosong tanpa error autentikasi palsu.
-- **Pelacakan Status Pengumpulan:** Memisahkan tugas yang belum dikumpulkan dan yang sudah terkirim, serta menampilkan jumlah tugas tertunda pada badge ikon ekstensi.
-- **Onboarding Terpandu Saat Instalasi Pertama:** Membuka halaman setup tiga langkah secara otomatis setelah pemasangan pertama untuk memverifikasi sesi SPADA, menghubungkan Google Calendar, dan menjalankan sinkronisasi awal.
-- **Diagnostik Error Berbasis Layanan:** Membedakan sesi SPADA habis, SPADA HTTP 403, batas permintaan (*rate limit*) Google Calendar, kendala izin OAuth, dan browser yang tidak didukung menjadi langkah perbaikan yang spesifik.
-- **Sinkronisasi Google Calendar Idempoten:** Menyimpan tenggat dalam zona waktu `Asia/Jakarta` (WIB) dengan pengingat popup 24 jam dan 3 jam sebelumnya, serta memperbarui event secara otomatis setelah tugas dikumpulkan.
+- **Filter Tampilan Popup & Waktu Relatif WIB:** Saring daftar tugas di popup berdasarkan mata kuliah, status (`Belum`, `Terkirim`, `Semua`), dan waktu lokal (`Semua waktu`, `Mendatang`, `Sudah lewat`) tanpa mengubah aturan sinkronisasi latar belakang. Setiap kartu menampilkan hitung mundur kalender WIB (`Asia/Jakarta`) dan status kelayakan sync.
+- **Aturan Filter Sync & Lifecycle Update:** Atur tugas yang dibuatkan event baru menurut rentang waktu (`upcoming_only`, `recent_7d`, `all`), status pengumpulan (`pending_only`, `submitted_only`, `all`), dan daftar pengecualian mata kuliah. Event yang sudah pernah dibuat tetap diperbarui (misalnya dari tertunda menjadi selesai) walau status barunya berada di luar filter buat event baru, tanpa menghapus event di kalender.
+- **Pratinjau Jumlah Kandidat Sync:** Menampilkan jumlah global kandidat event baru dari scan terakhir pada tombol Sync, tidak berubah saat pengguna mengganti filter tampilan lokal popup.
+- **Kustomisasi Pengingat & Warna Event:** Pilih hingga 5 preset pengingat popup (atau matikan pengingat) untuk tugas tertunda serta warna event Google Calendar (`colorId`) terpisah untuk tugas belum dan sudah dikumpulkan.
+- **Pemilih Google Calendar & Fallback ID Manual:** Memuat daftar kalender yang dapat ditulisi di halaman Options (setelah izin diberikan) atau tetap menggunakan input Calendar ID manual saat offline maupun bila izin daftar kalender belum disetujui.
+- **Onboarding Terpandu & Diagnostik Berbasis Layanan:** Membuka halaman setup tiga langkah pada pemasangan pertama serta mengklasifikasikan kendala sesi SPADA, HTTP 403/429, izin OAuth, dan browser yang tidak didukung menjadi langkah perbaikan yang jelas.
 - **Arsitektur Lokal Tanpa Backend:** Berjalan sepenuhnya di browser menggunakan sesi SPADA pengguna. Tidak ada server backend developer, tidak ada penyimpanan kredensial SPADA, dan tidak memerlukan konfigurasi `refresh token` manual.
 
 ---
@@ -78,9 +80,9 @@ Ekstensi ini kompatibel dengan metadata event milik proyek pendamping `spada_cal
 |---|---|
 | `storage` | Menyimpan ringkasan hasil scan, status sinkronisasi, dan preferensi pengguna secara lokal. |
 | `alarms` | Menjadwalkan pemindaian latar belakang setiap 3 jam selama Chrome berjalan. |
-| `identity` | Meminta token akses Google OAuth 2.0 melalui login Chrome (hanya scope `calendar.events`). |
+| `identity` | Meminta token akses Google OAuth 2.0 per operasi melalui login Chrome: `calendar.events` untuk sinkronisasi event tugas, dan `calendar.calendarlist.readonly` opsional untuk memuat nama/ID kalender yang dapat ditulisi di Options. |
 | `https://spada.upnyk.ac.id/*` | Membaca tautan mata kuliah aktif dan tabel `/mod/assign/index.php` memakai sesi SPADA aktif. |
-| `https://www.googleapis.com/*` | Membaca, membuat, dan memperbarui event tugas pada Google Calendar pengguna. |
+| `https://www.googleapis.com/*` | Memuat daftar kalender di perangkat untuk pemilihan kalender tujuan, serta membaca, membuat, dan memperbarui event tugas pada Google Calendar pilihan pengguna. |
 
 Rincian lengkap tersedia di [PRIVACY.md](PRIVACY.md).
 

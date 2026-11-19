@@ -46,8 +46,11 @@ npm run setup:unpacked
 ```
 This command generates an RSA-2048 SPKI DER public key (the private key is discarded in memory and never written to disk) and calculates a deterministic 32-character Extension ID consistent across all installations.
 
-### 2. Register OAuth Client ID in Google Cloud Console (One-Time)
-1. Open [Google Cloud Console](https://console.cloud.google.com/), enable **Google Calendar API**, and configure the **OAuth consent screen**.
+### 2. Register OAuth Client ID and Scopes in Google Cloud Console (One-Time)
+1. Open [Google Cloud Console](https://console.cloud.google.com/), enable **Google Calendar API**, and configure the **OAuth consent screen / Data Access** with both scopes:
+   - `https://www.googleapis.com/auth/calendar.events` (required for syncing assignment events)
+   - `https://www.googleapis.com/auth/calendar.calendarlist.readonly` (optional, requested in Options when loading the writable calendar picker)
+   Verify whether Google OAuth app verification is required for your audience before rollout.
 2. Navigate to **APIs & Services -> Credentials -> Create Credentials -> OAuth client ID**.
    - **Application type:** Chrome Extension
    - **Item ID:** paste the Extension ID output from Step 1.
@@ -68,9 +71,8 @@ For quick local development builds into `dist/` prior to setting a real `clientI
 ### 4. Unpacked Release Acceptance Checklist
 Before publishing `release/spada-calendar-extension-unpacked-v<version>.zip` to GitHub Releases:
 1. Extract the final ZIP into a clean directory outside the repository.
-2. Open a fresh Google Chrome profile, navigate to `chrome://extensions`, enable **Developer mode**, and load the extracted directory.
-3. Verify the Extension ID displayed in `chrome://extensions` matches `extensionId` in `config/unpacked-oauth.json` and Google Cloud Console.
-4. Complete onboarding Steps 1-3, including Google OAuth authorization with an eligible student account, and confirm events appear in that account's Google Calendar.
+2. Test on a **fresh Google Chrome profile**: enable **Developer mode**, load the extracted directory, confirm the Extension ID matches `config/unpacked-oauth.json` and Google Cloud Console, complete onboarding Steps 1-3, customize filters/reminders/colors in Options, authorize the calendar list picker, and verify events appear on the chosen calendar.
+3. Test an **in-place upgrade from v1.0.0** (same Extension ID): confirm v1 preferences migrate cleanly, confirm event sync continues working with the existing `calendar.events` grant even if calendar-list access is declined, then grant calendar-list access in Options, switch destination calendar, and confirm new events sync to the newly chosen calendar while old events remain untouched.
 
 ---
 

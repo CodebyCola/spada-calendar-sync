@@ -73,11 +73,11 @@ Host `docs/privacy.html` (or `PRIVACY.md`) publicly via GitHub Pages (e.g., `htt
 
 | Permission | Type | Justification |
 |---|---|---|
-| `storage` | permissions | Stores scanned assignment summaries, last scan timestamps, and user sync preferences (target calendar ID and past-due filter settings) locally in the browser so the popup opens instantaneously. |
+| `storage` | permissions | Stores scanned assignment summaries, last scan timestamps, and user sync preferences (chosen calendar ID, time/status filters, excluded course IDs, reminder presets, and event colors) locally in the browser so the popup opens instantaneously. |
 | `alarms` | permissions | Schedules periodic assignment checks every 3 hours while the browser is running so new or updated assignment deadlines are caught automatically. |
-| `identity` | permissions | Requests a Google OAuth 2.0 access token via Chrome sign-in so the user can authorize creating and updating assignment events on their personal Google Calendar. |
+| `identity` | permissions | Requests per-operation Google OAuth 2.0 access tokens via Chrome sign-in: `calendar.events` to create and update assignment events on the user's chosen Google Calendar, and optional `calendar.calendarlist.readonly` in Options to read writable calendar names/IDs on-device for destination selection. |
 | `https://spada.upnyk.ac.id/*` | host_permissions | Reads the signed-in user's active course links and `/mod/assign/index.php` assignment tables on SPADA UPNYK to extract assignment titles, deadlines, and submission statuses. |
-| `https://www.googleapis.com/*` | host_permissions | Calls the Google Calendar REST API v3 directly from the user's browser to list, create, and update synced assignment events on the user's selected calendar. |
+| `https://www.googleapis.com/*` | host_permissions | Calls the Google Calendar REST API v3 directly from the user's browser to list writable calendars for destination selection (when authorized) and to list, create, and update synced assignment events on the user's selected calendar. |
 
 ---
 

@@ -46,8 +46,11 @@ npm run setup:unpacked
 ```
 Perintah ini membuat kunci publik RSA-2048 SPKI DER (kunci privat dibuang di memori dan tidak pernah ditulis ke disk) serta menurunkan Extension ID 32 karakter yang deterministik dan identik di seluruh perangkat pengguna.
 
-### 2. Daftarkan OAuth Client ID di Google Cloud Console (Sekali Saja)
-1. Buka [Google Cloud Console](https://console.cloud.google.com/), aktifkan **Google Calendar API**, dan konfigurasikan **OAuth consent screen**.
+### 2. Daftarkan OAuth Client ID dan Scope di Google Cloud Console (Sekali Saja)
+1. Buka [Google Cloud Console](https://console.cloud.google.com/), aktifkan **Google Calendar API**, dan konfigurasikan **OAuth consent screen / Data Access** dengan kedua scope:
+   - `https://www.googleapis.com/auth/calendar.events` (wajib untuk sinkronisasi event tugas)
+   - `https://www.googleapis.com/auth/calendar.calendarlist.readonly` (opsional, diminta di Options saat memuat dropdown pemilih kalender)
+   Periksa kebutuhan verifikasi aplikasi OAuth Google sesuai audiens sebelum distribusi.
 2. Masuk ke **APIs & Services -> Credentials -> Create Credentials -> OAuth client ID**.
    - **Application type:** Chrome Extension
    - **Item ID:** masukkan Extension ID dari Langkah 1.
@@ -68,9 +71,8 @@ Untuk build pengembangan lokal cepat ke `dist/` sebelum memasukkan `clientId` as
 ### 4. Checklist Verifikasi Rilis Unpacked
 Sebelum mengunggah `release/spada-calendar-extension-unpacked-v<version>.zip` ke GitHub Releases:
 1. Ekstrak ZIP final ke direktori bersih di luar repositori proyek.
-2. Buka profil Google Chrome baru (*fresh profile*), buka `chrome://extensions`, aktifkan **Developer mode**, lalu muat direktori hasil ekstrak.
-3. Pastikan Extension ID pada `chrome://extensions` identik dengan `extensionId` di `config/unpacked-oauth.json` dan Google Cloud Console.
-4. Jalankan onboarding Langkah 1-3, termasuk otorisasi Google dengan akun mahasiswa yang memenuhi syarat, lalu pastikan event tugas tampil di Google Calendar akun tersebut.
+2. Uji pada **profil Google Chrome baru** (*fresh profile*): aktifkan **Developer mode**, muat direktori hasil ekstrak, pastikan Extension ID identik dengan `config/unpacked-oauth.json` dan Google Cloud Console, jalankan onboarding Langkah 1-3, uji filter/reminder/warna di Options, izinkan daftar kalender, lalu pastikan event tampil di kalender pilihan.
+3. Uji **upgrade in-place dari v1.0.0** (Extension ID sama): pastikan preferensi v1 bermigrasi normal, pastikan sinkronisasi event tetap berhasil dengan izin `calendar.events` lama meskipun izin daftar kalender ditolak, lalu berikan izin daftar kalender di Options, pilih kalender tujuan lain, dan pastikan event baru masuk ke kalender baru sementara event lama tetap utuh.
 
 ---
 
