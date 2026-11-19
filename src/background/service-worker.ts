@@ -3,7 +3,6 @@ import {
   getStoredState,
   mutateStoredState,
   updateStoredState,
-  type ExtensionSettings,
   type StoredExtensionState,
 } from "../shared/storage.js";
 import {
@@ -16,9 +15,13 @@ import {
   runSessionGuardedConnect,
   runSessionGuardedSync,
 } from "./install-lifecycle.js";
+import { runListWritableCalendars } from "./calendar-list-handler.js";
 import {
+  CALENDAR_EVENTS_SCOPES,
   isOAuthClientConfigured,
   requestChromeAuthToken,
+  requestChromeAuthTokenDetailed,
+  revokeAllGoogleTokens,
   scanSpadaWithFetcher,
   syncAssignmentsToGoogleCalendar,
 } from "./scanner.js";
@@ -33,8 +36,9 @@ export type ExtensionMessage =
   | { type: "CONNECT_GOOGLE" }
   | { type: "DISCONNECT_GOOGLE" }
   | { type: "SYNC_NOW" }
-  | { type: "SAVE_SETTINGS"; settings: ExtensionSettings }
+  | { type: "SAVE_SETTINGS"; settings: unknown }
   | { type: "CLEAR_DATA" }
+  | { type: "LIST_CALENDARS"; interactive?: boolean }
   | { type: "SPADA_PAGE_VISITED"; courses?: SpadaCourse[] };
 
 async function updateActionBadge(pendingCount: number): Promise<void> {
@@ -56,7 +60,10 @@ async function revalidateStateIfNeeded(
       if (typeof chrome.identity?.getAuthToken !== "function") {
         return null;
       }
-      const result = await chrome.identity.getAuthToken({ interactive: false });
+      const result = await chrome.identity.getAuthToken({
+        interactive: false,
+        scopes: [...CALENDAR_EVENTS_SCOPES],
+      });
       return result.token ?? null;
     },
     updateState: updateStoredState,
@@ -168,20 +175,25 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
           getState: getStoredState,
           updateState: updateStoredState,
           mutateState: mutateStoredState,
-          revokeCachedToken: async () => {
-            if (typeof chrome.identity?.getAuthToken !== "function") {
-              return;
-            }
-            const tokenRes = await chrome.identity.getAuthToken({ interactive: false });
-            if (tokenRes.token) {
-              if (typeof chrome.identity.removeCachedAuthToken === "function") {
-                await chrome.identity.removeCachedAuthToken({ token: tokenRes.token });
-              }
-              await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${tokenRes.token}`);
+          revokeCachedToken: () => revokeAllGoogleTokens(),
+        });
+        sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
+        return;
+      }
+
+      if (message.type === "LIST_CALENDARS") {
+        const result = await runListWritableCalendars(Boolean(message.interactive), {
+          oauthConfigured: isOAuthClientConfigured(),
+          getState: getStoredState,
+          getTokenDetailed: (interactive, scopes) =>
+            requestChromeAuthTokenDetailed(interactive, scopes),
+          removeCachedToken: async (token) => {
+            if (typeof chrome.identity?.removeCachedAuthToken === "function") {
+              await chrome.identity.removeCachedAuthToken({ token });
             }
           },
         });
-        sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
+        sendResponse(result);
         return;
       }
 

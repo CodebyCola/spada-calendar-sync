@@ -1,3 +1,8 @@
+import {
+  isCalendarColorId,
+  MAX_REMINDER_OVERRIDES,
+  normalizeReminderMinutes,
+} from "../shared/settings.js";
 import type {
   FormattedExtensionEvent,
   RemoteCalendarEvent,
@@ -22,11 +27,14 @@ export class GoogleCalendarApiError extends Error {
   }
 }
 
+export type CalendarPayloadMode = "insert" | "patch";
+
 export interface GoogleCalendarEventPayload {
   summary: string;
   description: string;
   start: { dateTime: string; timeZone: string };
   end: { dateTime: string; timeZone: string };
+  colorId?: string | null;
   reminders: {
     useDefault: boolean;
     overrides: Array<{ method: "popup"; minutes: number }>;
@@ -43,9 +51,19 @@ export interface GoogleCalendarEventPayload {
 
 export function toGoogleCalendarPayload(
   event: FormattedExtensionEvent,
-  overrideSpadaUid?: string
+  overrideSpadaUid?: string,
+  mode: CalendarPayloadMode = "insert"
 ): GoogleCalendarEventPayload {
-  return {
+  const effectiveMinutes = event.submitted
+    ? []
+    : normalizeReminderMinutes(event.reminderMinutes).slice(0, MAX_REMINDER_OVERRIDES);
+
+  const validColorId =
+    event.colorId && event.colorId !== "default" && isCalendarColorId(event.colorId)
+      ? event.colorId
+      : null;
+
+  const payload: GoogleCalendarEventPayload = {
     summary: event.title,
     description: event.description,
     start: {
@@ -58,12 +76,10 @@ export function toGoogleCalendarPayload(
     },
     reminders: {
       useDefault: false,
-      overrides: event.submitted
-        ? []
-        : [
-            { method: "popup", minutes: 1440 },
-            { method: "popup", minutes: 180 },
-          ],
+      overrides: effectiveMinutes.map((minutes) => ({
+        method: "popup" as const,
+        minutes,
+      })),
     },
     extendedProperties: {
       private: {
@@ -74,6 +90,14 @@ export function toGoogleCalendarPayload(
       },
     },
   };
+
+  if (validColorId !== null) {
+    payload.colorId = validColorId;
+  } else if (mode === "patch") {
+    payload.colorId = null;
+  }
+
+  return payload;
 }
 
 interface GoogleEventsListResponse {
@@ -191,7 +215,7 @@ export async function createRemoteEvent(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(toGoogleCalendarPayload(event)),
+    body: JSON.stringify(toGoogleCalendarPayload(event, undefined, "insert")),
   });
 
   if (!res.ok) {
@@ -218,11 +242,94 @@ export async function patchRemoteEvent(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(toGoogleCalendarPayload(event, targetSpadaUid)),
+    body: JSON.stringify(toGoogleCalendarPayload(event, targetSpadaUid, "patch")),
   });
 
   if (!res.ok) {
     const parsed = await parseErrorResponse(res);
     throw new GoogleCalendarApiError(res.status, parsed.detail, parsed.reason);
   }
+}
+
+export interface CalendarListItemDto {
+  id: string;
+  label: string;
+  primary: boolean;
+}
+
+interface GoogleCalendarListResponse {
+  items?: Array<{
+    id?: string;
+    summary?: string;
+    summaryOverride?: string;
+    accessRole?: string;
+    primary?: boolean;
+  }>;
+  nextPageToken?: string;
+}
+
+export async function listWritableCalendars(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<CalendarListItemDto[]> {
+  const seenIds = new Set<string>();
+  const calendars: CalendarListItemDto[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const url = new URL(`${GCAL_API_BASE}/users/me/calendarList`);
+    url.searchParams.set("minAccessRole", "writer");
+    url.searchParams.set("maxResults", "250");
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
+
+    const res = await fetchImpl(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      const parsed = await parseErrorResponse(res);
+      throw new GoogleCalendarApiError(res.status, parsed.detail, parsed.reason);
+    }
+
+    const data = (await res.json()) as GoogleCalendarListResponse;
+    for (const item of data.items ?? []) {
+      if (item.accessRole !== "owner" && item.accessRole !== "writer") {
+        continue;
+      }
+      const id = typeof item.id === "string" ? item.id.trim() : "";
+      if (!id || seenIds.has(id)) {
+        continue;
+      }
+      seenIds.add(id);
+      const label =
+        (typeof item.summaryOverride === "string" && item.summaryOverride.trim()) ||
+        (typeof item.summary === "string" && item.summary.trim()) ||
+        id;
+      calendars.push({
+        id,
+        label,
+        primary: Boolean(item.primary),
+      });
+    }
+
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  calendars.sort((a, b) => {
+    if (a.primary !== b.primary) {
+      return a.primary ? -1 : 1;
+    }
+    const labelCmp = a.label.localeCompare(b.label, "id", { sensitivity: "base" });
+    if (labelCmp !== 0) {
+      return labelCmp;
+    }
+    return a.id.localeCompare(b.id);
+  });
+
+  return calendars;
 }

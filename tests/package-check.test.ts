@@ -179,9 +179,17 @@ describe("packageExtension isolation", () => {
 
       expect("key" in storeManifest).toBe(false);
       expect(storeManifest.oauth2.client_id).toBe("store-only-111.apps.googleusercontent.com");
+      expect(storeManifest.oauth2.scopes).toEqual([
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+      ]);
 
       expect(unpackedManifest.key).toBe(VALID_RSA2048_SPKI_KEY);
       expect(unpackedManifest.oauth2.client_id).toBe("unpacked-only-222.apps.googleusercontent.com");
+      expect(unpackedManifest.oauth2.scopes).toEqual([
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+      ]);
 
       const storeOnboardingJs = readTextFromZip(storeResult.outZip, "onboarding/onboarding.js");
       const unpackedOnboardingJs = readTextFromZip(

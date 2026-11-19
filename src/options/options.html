@@ -33,31 +33,111 @@
         </p>
       </section>
 
-      <section class="panel">
-        <h2>2. Preferensi Sinkronisasi</h2>
-        <label class="field">
-          <span>Google Calendar ID (default: <code>primary</code>)</span>
-          <input id="calendar-id" type="text" placeholder="primary" />
+      <section class="panel" aria-labelledby="sync-pref-heading">
+        <h2 id="sync-pref-heading">2. Preferensi Sinkronisasi</h2>
+
+        <fieldset class="fieldset" id="calendar-target-fieldset">
+          <legend>Kalender Tujuan Google Calendar</legend>
+
+          <div id="calendar-picker-wrap" class="calendar-picker-wrap" hidden>
+            <label class="field" for="calendar-select">
+              <span>Pilih Kalender yang Dapat Ditulisi</span>
+              <select id="calendar-select" disabled></select>
+            </label>
+          </div>
+
+          <div class="row calendar-actions">
+            <button id="btn-refresh-calendars" type="button" class="btn btn-secondary" hidden>
+              Muat ulang daftar
+            </button>
+            <button id="btn-authorize-calendars" type="button" class="btn" hidden>
+              Izinkan akses daftar kalender
+            </button>
+          </div>
+
+          <p id="calendar-picker-status" class="hint" role="status" aria-live="polite"></p>
+
+          <label class="field" for="calendar-id">
+            <span>Google Calendar ID manual (default: <code>primary</code>)</span>
+            <input id="calendar-id" type="text" placeholder="primary" disabled />
+          </label>
+
+          <p id="calendar-destination-notice" class="hint notice-info" hidden>
+            Sync berikutnya akan menggunakan kalender tujuan baru. Event yang sudah dibuat sebelumnya tetap berada di kalender lama.
+          </p>
+        </fieldset>
+
+        <label class="field" for="time-filter">
+          <span>Rentang Waktu Tugas yang Dibuat Event Baru</span>
+          <select id="time-filter" disabled>
+            <option value="upcoming_only">Hanya tugas mendatang (belum lewat sekarang)</option>
+            <option value="recent_7d">Tugas mendatang + 7 hari terakhir (default)</option>
+            <option value="all">Semua tugas aktif yang memiliki tenggat</option>
+          </select>
         </label>
 
-        <label class="checkbox">
-          <input id="sync-submitted" type="checkbox" />
-          <span>Ikut sinkronkan tugas yang sudah dikumpulkan (ditandai <code>✅ [SELESAI]</code>)</span>
+        <label class="field" for="status-filter">
+          <span>Status Pengumpulan untuk Event Baru</span>
+          <select id="status-filter" disabled>
+            <option value="all">Semua (belum &amp; sudah dikumpulkan)</option>
+            <option value="pending_only">Hanya yang belum dikumpulkan</option>
+            <option value="submitted_only">Hanya yang sudah dikumpulkan</option>
+          </select>
         </label>
 
-        <label class="checkbox">
-          <input id="include-past" type="checkbox" />
-          <span>Sertakan tugas yang tenggatnya sudah lewat lebih dari 7 hari</span>
-        </label>
+        <p class="hint">
+          Event yang pernah dibuat sebelumnya akan tetap diperbarui statusnya (misalnya dari <code>📌 [TUGAS]</code> menjadi <code>✅ [SELESAI]</code>) walau status atau waktunya kini di luar aturan buat event baru.
+        </p>
+
+        <fieldset class="fieldset" id="excluded-courses-fieldset" disabled>
+          <legend>Kecualikan Mata Kuliah dari Sync</legend>
+          <p class="hint">
+            Centang mata kuliah yang tidak ingin disinkronkan ke Google Calendar. Event lama di kalender tidak akan dihapus.
+          </p>
+          <div id="excluded-courses-list" class="course-list">
+            <p class="hint">Belum ada mata kuliah dari hasil scan.</p>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset" id="reminders-fieldset" disabled>
+          <legend>Pengingat Google Calendar (Tugas Belum Dikumpulkan)</legend>
+          <p class="hint">
+            Pilih hingga 5 waktu pengingat popup. Tugas yang sudah dikumpulkan selalu tanpa pengingat.
+          </p>
+          <div id="reminder-presets-list" class="reminder-grid"></div>
+          <label class="checkbox">
+            <input id="reminder-none" type="checkbox" />
+            <span>Tanpa pengingat</span>
+          </label>
+        </fieldset>
+
+        <div class="color-grid">
+          <label class="field" for="pending-color-id">
+            <span>Warna Event Belum Dikumpulkan</span>
+            <div class="color-select-row">
+              <span id="pending-color-swatch" class="color-swatch" aria-hidden="true"></span>
+              <select id="pending-color-id" disabled></select>
+            </div>
+          </label>
+
+          <label class="field" for="submitted-color-id">
+            <span>Warna Event Sudah Dikumpulkan</span>
+            <div class="color-select-row">
+              <span id="submitted-color-swatch" class="color-swatch" aria-hidden="true"></span>
+              <select id="submitted-color-id" disabled></select>
+            </div>
+          </label>
+        </div>
 
         <label class="checkbox">
-          <input id="auto-visit" type="checkbox" />
+          <input id="auto-visit" type="checkbox" disabled />
           <span>Pindai otomatis saat membuka SPADA (maksimal 1x per 15 menit)</span>
         </label>
 
         <div class="row">
-          <button id="btn-save" type="button" class="btn">Simpan Pengaturan</button>
-          <button id="btn-clear" class="btn btn-danger" type="button">Hapus Data Lokal</button>
+          <button id="btn-save" type="button" class="btn" disabled>Simpan Pengaturan</button>
+          <button id="btn-reload" type="button" class="btn btn-secondary" hidden>Muat Ulang</button>
+          <button id="btn-clear" type="button" class="btn btn-danger" disabled>Hapus Data Lokal</button>
           <span id="save-status" class="status" role="status" aria-live="polite"></span>
         </div>
       </section>

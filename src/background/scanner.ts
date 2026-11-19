@@ -15,13 +15,25 @@ import {
 import type { ExtensionSettings, SyncSummary } from "../shared/storage.js";
 import {
   computeExtensionSyncPlan,
-  filterSyncableAssignments,
+  evaluateAssignmentForSync,
   formatScannedAssignment,
+  type LocalSyncCandidate,
 } from "../sync/formatter-and-diff.js";
 
 const SPADA_MY_URL = "https://spada.upnyk.ac.id/my/";
 const SCAN_BATCH_SIZE = 3;
 const GOOGLE_WRITE_DELAY_MS = 120;
+
+export const CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+export const CALENDAR_LIST_READONLY_SCOPE =
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
+export const CALENDAR_EVENTS_SCOPES: readonly string[] = [CALENDAR_EVENTS_SCOPE];
+export const CALENDAR_LIST_SCOPES: readonly string[] = [CALENDAR_LIST_READONLY_SCOPE];
+
+export interface AuthTokenResult {
+  token: string;
+  grantedScopes?: string[];
+}
 
 export interface ScanResult {
   courses: SpadaCourse[];
@@ -120,12 +132,13 @@ export function isOAuthClientConfigured(): boolean {
   return isConfiguredOAuthClientId(clientId);
 }
 
-export async function requestChromeAuthToken(
+export async function requestChromeAuthTokenDetailed(
   interactive: boolean,
+  scopes: readonly string[] = CALENDAR_EVENTS_SCOPES,
   identityApi?: Partial<typeof chrome.identity>
-): Promise<string> {
+): Promise<AuthTokenResult> {
   const api =
-    arguments.length >= 2
+    arguments.length >= 3
       ? identityApi
       : typeof chrome !== "undefined"
         ? chrome.identity
@@ -137,11 +150,86 @@ export async function requestChromeAuthToken(
     );
   }
 
-  const result = await api.getAuthToken({ interactive });
+  const result = await api.getAuthToken({
+    interactive,
+    scopes: [...scopes],
+  });
   if (!result?.token) {
     throw new Error("Gagal mendapatkan token Google OAuth.");
   }
-  return result.token;
+  return {
+    token: result.token,
+    grantedScopes: Array.isArray(result.grantedScopes) ? [...result.grantedScopes] : undefined,
+  };
+}
+
+export async function requestChromeAuthToken(
+  interactive: boolean,
+  identityApi?: Partial<typeof chrome.identity>,
+  scopes: readonly string[] = CALENDAR_EVENTS_SCOPES
+): Promise<string> {
+  const detailed =
+    arguments.length >= 2
+      ? await requestChromeAuthTokenDetailed(interactive, scopes, identityApi)
+      : await requestChromeAuthTokenDetailed(interactive, scopes);
+  return detailed.token;
+}
+
+/**
+ * Best-effort cleanup of cached Chrome Identity tokens for both events and calendar-list scopes
+ * without prompting the user or persisting any token.
+ */
+export async function revokeAllGoogleTokens(
+  identityApi?: Partial<typeof chrome.identity>,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
+  const api =
+    arguments.length >= 1
+      ? identityApi
+      : typeof chrome !== "undefined"
+        ? chrome.identity
+        : undefined;
+
+  if (!api || typeof api.getAuthToken !== "function") {
+    return;
+  }
+
+  const seenTokens = new Set<string>();
+  const scopeGroups: readonly (readonly string[])[] = [
+    CALENDAR_EVENTS_SCOPES,
+    CALENDAR_LIST_SCOPES,
+  ];
+
+  for (const scopes of scopeGroups) {
+    try {
+      const tokenRes = await api.getAuthToken({
+        interactive: false,
+        scopes: [...scopes],
+      });
+      if (tokenRes?.token) {
+        seenTokens.add(tokenRes.token);
+      }
+    } catch {
+      // Best-effort: ignore if scope was never granted or token is absent
+    }
+  }
+
+  for (const token of seenTokens) {
+    try {
+      if (typeof api.removeCachedAuthToken === "function") {
+        await api.removeCachedAuthToken({ token });
+      }
+    } catch {
+      // Ignore cache removal failure
+    }
+    try {
+      await fetchImpl(
+        `https://accounts.google.com/o/oauth2/revoke?token=${encodeURIComponent(token)}`
+      );
+    } catch {
+      // Ignore network revoke failure
+    }
+  }
 }
 
 async function getGoogleToken(interactive: boolean): Promise<string> {
@@ -160,6 +248,9 @@ function sleep(ms: number): Promise<void> {
 export interface SyncTokenDependencies {
   getToken?: (interactive: boolean) => Promise<string>;
   removeCachedToken?: (token: string) => Promise<void>;
+  fetchImpl?: typeof fetch;
+  nowMs?: number;
+  writeDelayMs?: number;
 }
 
 export async function syncAssignmentsToGoogleCalendar(
@@ -176,29 +267,45 @@ export async function syncAssignmentsToGoogleCalendar(
         await chrome.identity.removeCachedAuthToken({ token });
       }
     });
+  const fetchImpl = deps?.fetchImpl ?? fetch;
+  const nowMs = deps?.nowMs ?? Date.now();
+  const writeDelayMs = deps?.writeDelayMs ?? GOOGLE_WRITE_DELAY_MS;
 
   // Always establish/verify Google authorization before reporting sync completion,
   // even when there are currently 0 eligible assignments to sync.
   const token = await getToken(interactive);
 
-  const syncable = filterSyncableAssignments(assignments, {
-    includePastAssignments: settings.includePastAssignments,
-    syncSubmitted: settings.syncSubmitted,
-  });
+  const evaluated = assignments
+    .map((assignment) => ({
+      assignment,
+      evaluation: evaluateAssignmentForSync(assignment, settings, nowMs),
+    }))
+    .filter((entry) => entry.evaluation.mode !== "ignore");
 
-  if (syncable.length === 0) {
+  if (evaluated.length === 0) {
     return { created: 0, updated: 0, skipped: 0 };
   }
 
-  const formattedEvents = await Promise.all(syncable.map(formatScannedAssignment));
+  const candidates: LocalSyncCandidate[] = await Promise.all(
+    evaluated.map(async ({ assignment, evaluation }) => ({
+      event: await formatScannedAssignment(assignment, settings),
+      allowCreate: evaluation.mode === "create_or_update",
+    }))
+  );
+
+  const createdUids = new Set<string>();
+  const updatedUids = new Set<string>();
 
   const executeWithToken = async (accessToken: string): Promise<SyncSummary> => {
-    const remoteEvents = await listRemoteSpadaEvents(accessToken, settings.calendarId);
-    const plan = computeExtensionSyncPlan(formattedEvents, remoteEvents);
+    const remoteEvents = await listRemoteSpadaEvents(accessToken, settings.calendarId, fetchImpl);
+    const plan = computeExtensionSyncPlan(candidates, remoteEvents);
 
     for (const item of plan.toCreate) {
-      await createRemoteEvent(accessToken, settings.calendarId, item);
-      await sleep(GOOGLE_WRITE_DELAY_MS);
+      await createRemoteEvent(accessToken, settings.calendarId, item, fetchImpl);
+      createdUids.add(item.spadaUid);
+      if (writeDelayMs > 0) {
+        await sleep(writeDelayMs);
+      }
     }
 
     for (const item of plan.toUpdate) {
@@ -207,15 +314,23 @@ export async function syncAssignmentsToGoogleCalendar(
         settings.calendarId,
         item.googleEventId,
         item.event,
-        item.targetSpadaUid
+        item.targetSpadaUid,
+        fetchImpl
       );
-      await sleep(GOOGLE_WRITE_DELAY_MS);
+      updatedUids.add(item.event.spadaUid);
+      if (writeDelayMs > 0) {
+        await sleep(writeDelayMs);
+      }
     }
 
+    const skippedCount = plan.toSkip.filter(
+      (item) => !createdUids.has(item.spadaUid) && !updatedUids.has(item.spadaUid)
+    ).length;
+
     return {
-      created: plan.toCreate.length,
-      updated: plan.toUpdate.length,
-      skipped: plan.toSkip.length,
+      created: createdUids.size,
+      updated: updatedUids.size,
+      skipped: skippedCount,
     };
   };
 
