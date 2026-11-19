@@ -209,6 +209,13 @@ describe("buildExtension outDir safety & packageExtension unpacked strictness", 
       await expect(buildExtension({ target: "store", outDir: guardDir })).rejects.toThrow(
         /non-empty|dist|outDir/i
       );
+      await expect(
+        buildExtension({
+          target: "store",
+          outDir: guardDir,
+          ...({ allowCleanStaging: true } as Record<string, unknown>),
+        })
+      ).rejects.toThrow(/non-empty|dist|outDir/i);
       expect(existsSync(sentinel)).toBe(true);
       expect(readFileSync(sentinel, "utf8")).toBe("do not delete");
     } finally {

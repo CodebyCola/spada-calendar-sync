@@ -3,13 +3,16 @@ import {
   getStoredState,
   mutateStoredState,
   updateStoredState,
+  type ExtensionSettings,
   type StoredExtensionState,
 } from "../shared/storage.js";
 import {
   countPendingAssignments,
   handleExtensionInstalled,
   revalidateLegacyGoogleAuth,
+  runClearLocalData,
   runDisconnectGoogle,
+  runSaveSettings,
   runSessionGuardedConnect,
   runSessionGuardedSync,
 } from "./install-lifecycle.js";
@@ -30,6 +33,8 @@ export type ExtensionMessage =
   | { type: "CONNECT_GOOGLE" }
   | { type: "DISCONNECT_GOOGLE" }
   | { type: "SYNC_NOW" }
+  | { type: "SAVE_SETTINGS"; settings: ExtensionSettings }
+  | { type: "CLEAR_DATA" }
   | { type: "SPADA_PAGE_VISITED"; courses?: SpadaCourse[] };
 
 async function updateActionBadge(pendingCount: number): Promise<void> {
@@ -185,6 +190,27 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
         await performScan();
         await performSync(true, startGeneration);
         const state = await getStoredState();
+        sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
+        return;
+      }
+
+      if (message.type === "SAVE_SETTINGS") {
+        const state = await runSaveSettings(message.settings, {
+          getState: getStoredState,
+          updateState: updateStoredState,
+          mutateState: mutateStoredState,
+        });
+        sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
+        return;
+      }
+
+      if (message.type === "CLEAR_DATA") {
+        const state = await runClearLocalData({
+          getState: getStoredState,
+          updateState: updateStoredState,
+          mutateState: mutateStoredState,
+          updateBadge: updateActionBadge,
+        });
         sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
         return;
       }

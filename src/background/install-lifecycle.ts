@@ -1,7 +1,9 @@
-import type {
-  StateMutationDecision,
-  StoredExtensionState,
-  SyncSummary,
+import {
+  DEFAULT_SETTINGS,
+  type ExtensionSettings,
+  type StateMutationDecision,
+  type StoredExtensionState,
+  type SyncSummary,
 } from "../shared/storage.js";
 
 export type AtomicStateMutator = <T>(
@@ -271,6 +273,75 @@ export async function runDisconnectGoogle(
     // Ignore if no token is cached or network revoke fails
   }
   return disconnected;
+}
+
+export interface SaveSettingsDeps {
+  getState: () => Promise<StoredExtensionState>;
+  updateState: (patch: Partial<StoredExtensionState>) => Promise<StoredExtensionState>;
+  mutateState?: AtomicStateMutator;
+}
+
+/**
+ * Atomically updates only `settings` through the service worker's serialized storage queue
+ * so concurrent Options saves cannot clobber `googleConnected` or `googleSessionGeneration`.
+ */
+export async function runSaveSettings(
+  settings: ExtensionSettings,
+  deps: SaveSettingsDeps
+): Promise<StoredExtensionState> {
+  const mutate = resolveMutator(deps);
+  const normalized: ExtensionSettings = {
+    calendarId: settings.calendarId.trim() || "primary",
+    syncSubmitted: Boolean(settings.syncSubmitted),
+    includePastAssignments: Boolean(settings.includePastAssignments),
+    autoSyncOnVisit: Boolean(settings.autoSyncOnVisit),
+  };
+  const { state } = await mutate(() => ({
+    patch: { settings: normalized },
+    result: undefined,
+  }));
+  return state;
+}
+
+export function buildClearedStatePatch(
+  currentGeneration = 0
+): Omit<StoredExtensionState, "settings"> & { settings: ExtensionSettings } {
+  return {
+    courses: [],
+    assignments: [],
+    lastScanAt: null,
+    lastScanError: null,
+    lastSyncAt: null,
+    lastSyncSummary: null,
+    lastSyncError: null,
+    googleConnected: false,
+    googleAuthVerified: false,
+    googleSessionGeneration: currentGeneration + 1,
+    settings: { ...DEFAULT_SETTINGS },
+  };
+}
+
+export interface ClearLocalDataDeps {
+  getState: () => Promise<StoredExtensionState>;
+  updateState: (patch: Partial<StoredExtensionState>) => Promise<StoredExtensionState>;
+  mutateState?: AtomicStateMutator;
+  updateBadge: (pendingCount: number) => Promise<void>;
+}
+
+/**
+ * Resets all stored extension data while atomically advancing `googleSessionGeneration`
+ * so any in-flight sync started before reset (including at generation 0) is rejected as stale.
+ */
+export async function runClearLocalData(
+  deps: ClearLocalDataDeps
+): Promise<StoredExtensionState> {
+  const mutate = resolveMutator(deps);
+  const { state } = await mutate((current) => ({
+    patch: buildClearedStatePatch(current.googleSessionGeneration),
+    result: undefined,
+  }));
+  await deps.updateBadge(0);
+  return state;
 }
 
 export function countPendingAssignments(

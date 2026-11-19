@@ -3,7 +3,9 @@ import {
   buildDisconnectedStatePatch,
   handleExtensionInstalled,
   revalidateLegacyGoogleAuth,
+  runClearLocalData,
   runDisconnectGoogle,
+  runSaveSettings,
   runSessionGuardedConnect,
   runSessionGuardedSync,
 } from "../src/background/install-lifecycle.js";
@@ -555,5 +557,121 @@ describe("Atomic storage-queue generation checks under pending disconnect writes
 
     expect(outcome.stale).toBe(true);
     expect(runSyncCalled).toBe(false);
+  });
+
+  it("Preserves disconnect when Options saves settings concurrently through the worker storage queue", async () => {
+    const harness = installInMemoryChromeStorage(
+      makeState({
+        googleConnected: true,
+        googleAuthVerified: true,
+        googleSessionGeneration: 0,
+      })
+    );
+
+    // Hold disconnect's write in-flight while Options submits SAVE_SETTINGS
+    harness.armHoldOnNextSet();
+    const setStarted = harness.waitUntilHeldSetStarts();
+    const disconnectTask = runDisconnectGoogle({
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      revokeCachedToken: async () => {},
+    });
+    await setStarted;
+
+    const saveTask = runSaveSettings(
+      {
+        calendarId: "team-cal@group.calendar.google.com",
+        syncSubmitted: false,
+        includePastAssignments: true,
+        autoSyncOnVisit: false,
+      },
+      {
+        getState: getStoredState,
+        updateState: updateStoredState,
+        mutateState: mutateStoredState,
+      }
+    );
+
+    harness.releaseSet();
+    await disconnectTask;
+    const savedState = await saveTask;
+
+    const finalState = await getStoredState();
+    expect(savedState.googleConnected).toBe(false);
+    expect(finalState.googleConnected).toBe(false);
+    expect(finalState.googleAuthVerified).toBe(false);
+    expect(finalState.googleSessionGeneration).toBe(1);
+    expect(finalState.settings).toEqual({
+      calendarId: "team-cal@group.calendar.google.com",
+      syncSubmitted: false,
+      includePastAssignments: true,
+      autoSyncOnVisit: false,
+    });
+  });
+
+  it("Prevents an in-flight sync started at generation 0 from resurrecting Google state after CLEAR_DATA reset", async () => {
+    installInMemoryChromeStorage(
+      makeState({
+        courses: [
+          {
+            courseId: "52581",
+            courseName: "Kapita Selekta",
+            shortCourseName: "Kapita Selekta",
+            courseUrl: "https://spada.upnyk.ac.id/course/view.php?id=52581",
+          },
+        ],
+        lastScanAt: "2026-11-19T00:00:00.000Z",
+        googleConnected: true,
+        googleAuthVerified: true,
+        googleSessionGeneration: 0,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          calendarId: "custom-cal",
+        },
+      })
+    );
+
+    let releaseSync!: (summary: { created: number; updated: number; skipped: number }) => void;
+    const heldSync = new Promise<{ created: number; updated: number; skipped: number }>((resolve) => {
+      releaseSync = resolve;
+    });
+
+    // 1. Start sync at generation 0
+    const syncTask = runSessionGuardedSync({
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      runSync: () => heldSync,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 2. User triggers "Hapus Data Lokal" via worker CLEAR_DATA
+    let badgeResetValue: number | null = null;
+    await runClearLocalData({
+      getState: getStoredState,
+      updateState: updateStoredState,
+      mutateState: mutateStoredState,
+      updateBadge: async (count) => {
+        badgeResetValue = count;
+      },
+    });
+
+    // 3. Release the held generation-0 sync
+    releaseSync({ created: 4, updated: 1, skipped: 0 });
+    const syncOutcome = await syncTask;
+
+    const finalState = await getStoredState();
+    expect(badgeResetValue).toBe(0);
+    expect(syncOutcome.stale).toBe(true);
+    expect(finalState.googleSessionGeneration).toBe(1);
+    expect(finalState.googleConnected).toBe(false);
+    expect(finalState.googleAuthVerified).toBe(false);
+    expect(finalState.lastSyncAt).toBeNull();
+    expect(finalState.lastSyncSummary).toBeNull();
+    expect(finalState.courses).toEqual([]);
+    expect(finalState.settings).toEqual(DEFAULT_SETTINGS);
   });
 });

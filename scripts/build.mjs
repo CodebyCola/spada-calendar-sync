@@ -8,7 +8,6 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, parse, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
@@ -44,11 +43,6 @@ function parseBuildArgs(argv) {
   return { target, outDir };
 }
 
-function isStrictlyInside(childPath, parentPath) {
-  const rel = relative(parentPath, childPath);
-  return rel.length > 0 && !rel.startsWith("..") && rel !== "." && !parse(rel).root;
-}
-
 function isSameOrAncestor(candidateDir, targetDir) {
   const rel = relative(candidateDir, targetDir);
   return rel === "" || (!rel.startsWith("..") && !parse(rel).root);
@@ -73,7 +67,7 @@ function cleanDirectory(dirPath) {
   }
 }
 
-function validateAndPrepareOutDir(rawOutDir, cwd, allowCleanStaging) {
+function validateAndPrepareOutDir(rawOutDir, cwd) {
   const effectiveRaw = rawOutDir === undefined ? "dist" : rawOutDir;
   if (typeof effectiveRaw !== "string" || effectiveRaw.trim().length === 0) {
     throw new Error('Invalid outDir (--out-dir): directory path must not be empty.');
@@ -82,7 +76,6 @@ function validateAndPrepareOutDir(rawOutDir, cwd, allowCleanStaging) {
   const outDir = resolve(cwd, effectiveRaw.trim());
   const normalizedCwd = resolve(cwd);
   const defaultDistDir = resolve(normalizedCwd, "dist");
-  const systemTmpDir = resolve(tmpdir());
 
   if (parse(outDir).root === outDir || isSameOrAncestor(outDir, normalizedCwd)) {
     throw new Error(
@@ -90,15 +83,13 @@ function validateAndPrepareOutDir(rawOutDir, cwd, allowCleanStaging) {
     );
   }
 
-  const isOwnedDist = outDir === defaultDistDir;
-  const isAuthorizedStaging = allowCleanStaging && isStrictlyInside(outDir, systemTmpDir);
-
-  if (isOwnedDist || isAuthorizedStaging) {
+  // Only the build-owned dist/ directory may be recursively cleaned.
+  if (outDir === defaultDistDir) {
     cleanDirectory(outDir);
     return outDir;
   }
 
-  // Custom outDir outside dist/ and packager staging: never recursively delete non-empty directories
+  // Any other outDir (including packager's fresh mkdtempSync staging dir) must not exist or be empty.
   if (existsSync(outDir)) {
     const stat = statSync(outDir);
     if (!stat.isDirectory()) {
@@ -121,7 +112,6 @@ function validateAndPrepareOutDir(rawOutDir, cwd, allowCleanStaging) {
  * @param {{
  *   target?: "store" | "unpacked";
  *   outDir?: string;
- *   allowCleanStaging?: boolean;
  *   unpackedConfig?: any;
  *   unpackedConfigPath?: string;
  *   baseManifestPath?: string;
@@ -157,7 +147,7 @@ export async function buildExtension(options = {}) {
     }
   }
 
-  const outDir = validateAndPrepareOutDir(options.outDir, cwd, options.allowCleanStaging === true);
+  const outDir = validateAndPrepareOutDir(options.outDir, cwd);
 
   await build({
     entryPoints: {

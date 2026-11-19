@@ -48,11 +48,10 @@ export async function packageExtension(options = {}) {
   const stagingDir = mkdtempSync(join(tmpdir(), `spada-ext-${target}-`));
 
   try {
-    // 1. Build into isolated staging directory (never mutates shared dist/)
+    // 1. Build into isolated empty staging directory (never mutates shared dist/)
     const built = await buildExtension({
       target,
       outDir: stagingDir,
-      allowCleanStaging: true,
       unpackedConfig: target === "unpacked" ? options.unpackedConfig : undefined,
       unpackedConfigPath: options.unpackedConfigPath,
       baseManifestPath: options.baseManifestPath,
