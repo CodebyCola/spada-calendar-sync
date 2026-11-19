@@ -5,6 +5,7 @@ import {
   type StoredExtensionState,
   type SyncSummary,
 } from "../shared/storage.js";
+import { parseSaveSettingsPayload } from "../shared/settings.js";
 
 export type AtomicStateMutator = <T>(
   mutator: (current: StoredExtensionState) => StateMutationDecision<T>
@@ -286,20 +287,19 @@ export interface SaveSettingsDeps {
  * so concurrent Options saves cannot clobber `googleConnected` or `googleSessionGeneration`.
  */
 export async function runSaveSettings(
-  settings: ExtensionSettings,
+  settings: unknown,
   deps: SaveSettingsDeps
 ): Promise<StoredExtensionState> {
   const mutate = resolveMutator(deps);
-  const normalized: ExtensionSettings = {
-    calendarId: settings.calendarId.trim() || "primary",
-    syncSubmitted: Boolean(settings.syncSubmitted),
-    includePastAssignments: Boolean(settings.includePastAssignments),
-    autoSyncOnVisit: Boolean(settings.autoSyncOnVisit),
-  };
-  const { state } = await mutate(() => ({
-    patch: { settings: normalized },
-    result: undefined,
-  }));
+  // Pre-validate basic shape before queueing mutation, then validate against current state atomically.
+  parseSaveSettingsPayload(settings, DEFAULT_SETTINGS);
+  const { state } = await mutate((current) => {
+    const canonical = parseSaveSettingsPayload(settings, current.settings);
+    return {
+      patch: { settings: canonical },
+      result: undefined,
+    };
+  });
   return state;
 }
 
@@ -317,7 +317,11 @@ export function buildClearedStatePatch(
     googleConnected: false,
     googleAuthVerified: false,
     googleSessionGeneration: currentGeneration + 1,
-    settings: { ...DEFAULT_SETTINGS },
+    settings: {
+      ...DEFAULT_SETTINGS,
+      excludedCourseIds: [...DEFAULT_SETTINGS.excludedCourseIds],
+      reminderMinutes: [...DEFAULT_SETTINGS.reminderMinutes],
+    },
   };
 }
 

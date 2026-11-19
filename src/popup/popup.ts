@@ -1,7 +1,14 @@
-import type { ScannedAssignment } from "../parsers/spada-html.js";
 import { diagnoseSetupError, evaluateSetupStatus } from "../setup/setup-diagnostics.js";
 import type { StoredExtensionState } from "../shared/storage.js";
 import { formatWibDateTime } from "../sync/formatter-and-diff.js";
+import {
+  buildPopupViewModel,
+  DEFAULT_POPUP_VIEW_FILTERS,
+  type PopupAssignmentCardModel,
+  type PopupStatusViewFilter,
+  type PopupTimeViewFilter,
+  type PopupViewFilters,
+} from "./assignment-view.js";
 
 interface WorkerResponse {
   ok: boolean;
@@ -10,7 +17,7 @@ interface WorkerResponse {
   oauthConfigured: boolean;
 }
 
-let currentFilter: "pending" | "all" = "pending";
+let viewFilters: PopupViewFilters = { ...DEFAULT_POPUP_VIEW_FILTERS };
 let cachedState: StoredExtensionState | null = null;
 let cachedOAuthConfigured = false;
 
@@ -22,9 +29,14 @@ const alertBox = document.getElementById("alert-box") as HTMLElement;
 const btnOptions = document.getElementById("btn-options") as HTMLButtonElement;
 const btnScan = document.getElementById("btn-scan") as HTMLButtonElement;
 const btnSync = document.getElementById("btn-sync") as HTMLButtonElement;
+const syncPreviewHint = document.getElementById("sync-preview-hint") as HTMLParagraphElement;
+const filterCourseSelect = document.getElementById("filter-course") as HTMLSelectElement;
+const filterTimeSelect = document.getElementById("filter-time") as HTMLSelectElement;
 const tabPending = document.getElementById("tab-pending") as HTMLButtonElement;
+const tabSubmitted = document.getElementById("tab-submitted") as HTMLButtonElement;
 const tabAll = document.getElementById("tab-all") as HTMLButtonElement;
 const countPending = document.getElementById("count-pending") as HTMLSpanElement;
+const countSubmitted = document.getElementById("count-submitted") as HTMLSpanElement;
 const countAll = document.getElementById("count-all") as HTMLSpanElement;
 const listEl = document.getElementById("assignment-list") as HTMLElement;
 const syncStatusEl = document.getElementById("sync-status") as HTMLSpanElement;
@@ -40,7 +52,22 @@ function showAlert(message: string | null, isError = false): void {
   alertBox.textContent = message;
 }
 
-function createAssignmentCard(item: ScannedAssignment): HTMLElement {
+function setActiveStatusTab(status: PopupStatusViewFilter): void {
+  const map: Array<[HTMLButtonElement, PopupStatusViewFilter]> = [
+    [tabPending, "pending"],
+    [tabSubmitted, "submitted"],
+    [tabAll, "all"],
+  ];
+  for (const [btn, value] of map) {
+    const active = value === status;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", String(active));
+  }
+}
+
+function createAssignmentCard(cardModel: PopupAssignmentCardModel): HTMLElement {
+  const { assignment: item, evaluation, syncReasonText, deadline } = cardModel;
+
   const card = document.createElement("article");
   card.className = "card";
 
@@ -64,26 +91,69 @@ function createAssignmentCard(item: ScannedAssignment): HTMLElement {
   course.className = "card-course";
   course.textContent = item.courseName;
 
-  const due = document.createElement("div");
-  due.className = item.submitted ? "card-due done" : "card-due";
-  due.textContent = item.dueDateIso
-    ? `Deadline: ${formatWibDateTime(new Date(item.dueDateIso))}`
-    : "Deadline: Tidak diatur (-)";
+  const dueRow = document.createElement("div");
+  dueRow.className = "card-due-row";
 
-  card.append(top, course, due);
+  const urgencyBadge = document.createElement("span");
+  urgencyBadge.className = `urgency-pill urgency-${deadline.urgency}`;
+  urgencyBadge.textContent = deadline.relativeLabel;
+  dueRow.append(urgencyBadge);
+
+  if (deadline.valid) {
+    const absDue = document.createElement("span");
+    absDue.className = item.submitted ? "card-due done" : "card-due";
+    absDue.textContent = deadline.absoluteLabel;
+    dueRow.append(absDue);
+  }
+
+  const syncNote = document.createElement("div");
+  syncNote.className = `card-sync-note sync-${evaluation.mode}`;
+  syncNote.textContent = syncReasonText;
+
+  card.append(top, course, dueRow, syncNote);
   return card;
+}
+
+function syncCourseSelectOptions(
+  options: Array<{ value: string; label: string }>,
+  selectedValue: string
+): void {
+  filterCourseSelect.replaceChildren();
+  for (const opt of options) {
+    const el = document.createElement("option");
+    el.value = opt.value;
+    el.textContent = opt.label;
+    filterCourseSelect.append(el);
+  }
+  filterCourseSelect.value = selectedValue;
 }
 
 function render(): void {
   if (!cachedState) return;
 
-  const pendingItems = cachedState.assignments.filter((a) => !a.submitted);
-  const allItems = cachedState.assignments;
+  const nowMs = Date.now();
+  const vm = buildPopupViewModel({
+    assignments: cachedState.assignments,
+    courses: cachedState.courses,
+    settings: cachedState.settings,
+    viewFilters,
+    lastScanAt: cachedState.lastScanAt,
+    nowMs,
+  });
 
-  countPending.textContent = String(pendingItems.length);
-  countAll.textContent = String(allItems.length);
+  viewFilters.courseId = vm.effectiveCourseId;
+  syncCourseSelectOptions(vm.courseOptions, vm.effectiveCourseId);
+  filterTimeSelect.value = viewFilters.time;
+  setActiveStatusTab(viewFilters.status);
 
-  if (cachedState.lastScanAt) {
+  countPending.textContent = String(vm.pendingTotalCount);
+  countSubmitted.textContent = String(vm.submittedTotalCount);
+  countAll.textContent = String(vm.allTotalCount);
+
+  btnSync.textContent = vm.syncButtonLabel;
+  syncPreviewHint.textContent = vm.syncPreviewHint;
+
+  if (cachedState.lastScanAt && Number.isFinite(Date.parse(cachedState.lastScanAt))) {
     metaLine.textContent = `${cachedState.courses.length} mata kuliah • Scan: ${formatWibDateTime(
       new Date(cachedState.lastScanAt)
     )}`;
@@ -130,22 +200,34 @@ function render(): void {
     btnConnect.textContent = "Hubungkan Google";
   }
 
-  const visible = currentFilter === "pending" ? pendingItems : allItems;
   listEl.replaceChildren();
 
-  if (visible.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent =
-      allItems.length === 0
-        ? "Belum ada data tugas. Pastikan tab SPADA sudah login, lalu klik 'Scan SPADA'."
-        : "Semua tugas di mata kuliah aktif sudah dikumpulkan!";
-    listEl.append(empty);
+  if (vm.visibleCards.length === 0) {
+    const wrap = document.createElement("div");
+    wrap.className = "empty";
+
+    const msg = document.createElement("p");
+    msg.textContent = vm.emptyStateMessage ?? "Tidak ada tugas.";
+    wrap.append(msg);
+
+    if (vm.canResetFilters) {
+      const resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.className = "btn btn-secondary reset-filter-btn";
+      resetBtn.textContent = "Tampilkan semua tugas";
+      resetBtn.addEventListener("click", () => {
+        viewFilters = { courseId: "all", status: "all", time: "all" };
+        render();
+      });
+      wrap.append(resetBtn);
+    }
+
+    listEl.append(wrap);
     return;
   }
 
-  for (const item of visible) {
-    listEl.append(createAssignmentCard(item));
+  for (const cardModel of vm.visibleCards) {
+    listEl.append(createAssignmentCard(cardModel));
   }
 }
 
@@ -213,18 +295,48 @@ btnConnect.addEventListener("click", () => {
   void sendAction(action);
 });
 
+filterCourseSelect.addEventListener("change", () => {
+  viewFilters.courseId = filterCourseSelect.value;
+  render();
+});
+
+filterTimeSelect.addEventListener("change", () => {
+  viewFilters.time = filterTimeSelect.value as PopupTimeViewFilter;
+  render();
+});
+
 tabPending.addEventListener("click", () => {
-  currentFilter = "pending";
-  tabPending.classList.add("active");
-  tabAll.classList.remove("active");
+  viewFilters.status = "pending";
+  render();
+});
+
+tabSubmitted.addEventListener("click", () => {
+  viewFilters.status = "submitted";
   render();
 });
 
 tabAll.addEventListener("click", () => {
-  currentFilter = "all";
-  tabAll.classList.add("active");
-  tabPending.classList.remove("active");
+  viewFilters.status = "all";
   render();
+});
+
+// Keep relative countdown labels fresh while popup remains open
+setInterval(() => {
+  if (cachedState) {
+    render();
+  }
+}, 60_000);
+
+window.addEventListener("focus", () => {
+  if (cachedState) {
+    render();
+  }
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && cachedState) {
+    render();
+  }
 });
 
 void sendAction("GET_STATE");

@@ -26,10 +26,29 @@
       <button id="btn-scan" type="button" class="btn btn-primary">🔍 Scan SPADA</button>
       <button id="btn-sync" type="button" class="btn btn-secondary">📅 Sync ke Calendar</button>
     </section>
+    <p id="sync-preview-hint" class="preview-hint">Belum ada hasil scan</p>
 
-    <section class="tabs">
-      <button id="tab-pending" type="button" class="tab active">Belum Dikumpulkan (<span id="count-pending">0</span>)</button>
-      <button id="tab-all" type="button" class="tab">Semua Tugas (<span id="count-all">0</span>)</button>
+    <section class="filter-bar" aria-label="Filter tampilan daftar tugas">
+      <div class="filter-field">
+        <label for="filter-course" class="sr-only">Filter mata kuliah</label>
+        <select id="filter-course" class="filter-select" aria-label="Filter mata kuliah">
+          <option value="all">Semua mata kuliah</option>
+        </select>
+      </div>
+      <div class="filter-field">
+        <label for="filter-time" class="sr-only">Filter waktu tenggat</label>
+        <select id="filter-time" class="filter-select" aria-label="Filter waktu tenggat">
+          <option value="all">Semua waktu</option>
+          <option value="upcoming">Mendatang</option>
+          <option value="overdue">Sudah lewat</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="tabs" role="tablist" aria-label="Filter status pengumpulan">
+      <button id="tab-pending" type="button" class="tab active" role="tab" aria-selected="true">Belum (<span id="count-pending">0</span>)</button>
+      <button id="tab-submitted" type="button" class="tab" role="tab" aria-selected="false">Terkirim (<span id="count-submitted">0</span>)</button>
+      <button id="tab-all" type="button" class="tab" role="tab" aria-selected="false">Semua (<span id="count-all">0</span>)</button>
     </section>
 
     <main id="assignment-list" class="list"></main>

@@ -89,16 +89,52 @@ body {
   display: none;
 }
 
-:where(a:any-link, button):focus-visible {
+:where(a:any-link, button, select):focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1.25fr;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 10px 12px 4px;
+}
+
+.preview-hint {
+  padding: 0 12px 8px;
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.35;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+
+.filter-select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11px;
+  background: #ffffff;
+  color: #0f172a;
 }
 
 .btn {
@@ -168,8 +204,16 @@ body {
 .empty {
   text-align: center;
   color: #64748b;
-  padding: 28px 12px;
+  padding: 24px 12px;
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.reset-filter-btn {
+  margin-top: 2px;
 }
 
 .card {
@@ -224,13 +268,69 @@ body {
   font-weight: 500;
 }
 
+.card-due-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.urgency-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.urgency-overdue {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.urgency-urgent {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.urgency-soon {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.urgency-normal {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.urgency-done,
+.urgency-none {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .card-due {
   font-size: 11px;
-  color: #dc2626;
+  color: #334155;
   font-weight: 500;
 }
 
 .card-due.done {
+  color: #64748b;
+}
+
+.card-sync-note {
+  font-size: 10px;
+  color: #475569;
+  margin-top: 2px;
+}
+
+.card-sync-note.sync-create_or_update {
+  color: #0f3d6e;
+}
+
+.card-sync-note.sync-ignore {
   color: #64748b;
 }
 

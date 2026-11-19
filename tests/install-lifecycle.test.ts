@@ -581,9 +581,11 @@ describe("Atomic storage-queue generation checks under pending disconnect writes
 
     const saveTask = runSaveSettings(
       {
+        ...DEFAULT_SETTINGS,
         calendarId: "team-cal@group.calendar.google.com",
-        syncSubmitted: false,
-        includePastAssignments: true,
+        timeFilter: "all",
+        statusFilter: "pending_only",
+        excludedCourseIds: [],
         autoSyncOnVisit: false,
       },
       {
@@ -603,9 +605,11 @@ describe("Atomic storage-queue generation checks under pending disconnect writes
     expect(finalState.googleAuthVerified).toBe(false);
     expect(finalState.googleSessionGeneration).toBe(1);
     expect(finalState.settings).toEqual({
+      ...DEFAULT_SETTINGS,
       calendarId: "team-cal@group.calendar.google.com",
-      syncSubmitted: false,
-      includePastAssignments: true,
+      timeFilter: "all",
+      statusFilter: "pending_only",
+      excludedCourseIds: [],
       autoSyncOnVisit: false,
     });
   });

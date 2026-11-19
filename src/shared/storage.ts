@@ -1,11 +1,16 @@
 import type { ScannedAssignment, SpadaCourse } from "../parsers/spada-html.js";
+import {
+  DEFAULT_SETTINGS,
+  normalizeSettings,
+  type CalendarColorId,
+  type ExtensionSettings,
+  type ReminderMinutePreset,
+  type StatusFilter,
+  type TimeFilter,
+} from "./settings.js";
 
-export interface ExtensionSettings {
-  calendarId: string;
-  syncSubmitted: boolean;
-  includePastAssignments: boolean;
-  autoSyncOnVisit: boolean;
-}
+export { DEFAULT_SETTINGS, normalizeSettings };
+export type { CalendarColorId, ExtensionSettings, ReminderMinutePreset, StatusFilter, TimeFilter };
 
 export interface SyncSummary {
   created: number;
@@ -27,13 +32,6 @@ export interface StoredExtensionState {
   settings: ExtensionSettings;
 }
 
-export const DEFAULT_SETTINGS: ExtensionSettings = {
-  calendarId: "primary",
-  syncSubmitted: true,
-  includePastAssignments: false,
-  autoSyncOnVisit: true,
-};
-
 const STORAGE_KEY = "spadaScannerState";
 let storageWriteQueue: Promise<unknown> = Promise.resolve();
 
@@ -52,10 +50,7 @@ export async function getStoredState(): Promise<StoredExtensionState> {
     googleConnected,
     googleAuthVerified: raw?.googleAuthVerified ?? false,
     googleSessionGeneration: raw?.googleSessionGeneration ?? 0,
-    settings: {
-      ...DEFAULT_SETTINGS,
-      ...(raw?.settings ?? {}),
-    },
+    settings: normalizeSettings(raw?.settings),
   };
 }
 
@@ -76,10 +71,9 @@ export async function mutateStoredState<T>(
     const next: StoredExtensionState = {
       ...current,
       ...patch,
-      settings: {
-        ...current.settings,
-        ...(patch.settings ?? {}),
-      },
+      settings: normalizeSettings(
+        patch.settings ? { ...current.settings, ...patch.settings } : current.settings
+      ),
     };
     await chrome.storage.local.set({ [STORAGE_KEY]: next });
     return { state: next, result };
