@@ -1,30 +1,43 @@
-# SPADA UPNYK Assignment Scanner (Chrome Extension MV3)
+# SPADA UPNYK Assignment Scanner
 
-> 🌐 **Language:** **English** | [Bahasa Indonesia](README.id.md)  
-> 🚀 **Setup & Usage Guide:** [HOW_TO_RUN.md](HOW_TO_RUN.md) | [HOW_TO_RUN.id.md](HOW_TO_RUN.id.md)
+Language: **English** | [Bahasa Indonesia](README.id.md)  
+Setup and Execution Guide: [HOW_TO_RUN.md](HOW_TO_RUN.md) | [HOW_TO_RUN.id.md](HOW_TO_RUN.id.md)
 
-A Manifest V3 Google Chrome Extension that scans **every assignment** across all active courses on **SPADA Wimaya UPN "Veteran" Yogyakarta** (`spada.upnyk.ac.id`) — **including assignments missing from Moodle's built-in calendar / `.ics` feed** — tracks submission status (`✅ Submitted` vs `⏳ Pending`), and syncs deadlines directly to your personal **Google Calendar**.
+A Manifest V3 Google Chrome extension that scans assignments across all active courses on **SPADA Wimaya UPN "Veteran" Yogyakarta** (`spada.upnyk.ac.id`) — including assignments omitted from Moodle's built-in calendar and `.ics` feed — tracks submission status, and synchronizes deadlines to the user's personal Google Calendar.
 
-The extension also automatically recognizes calendar events created by the companion CLI project `spada_calendar_sync`, so both tools can be used side by side without creating duplicate events.
-
----
-
-## Key Features
-
-- **Complete Assignment Detection:** Scans every active course's assignment index on SPADA UPNYK, catching tasks omitted from Moodle's built-in calendar (and handles empty start-of-semester/KRS dashboards gracefully).
-- **Submission Status & Toolbar Badge:** Separates pending tasks from submitted assignments and displays a live pending counter badge on the extension icon.
-- **3-Step Guided Onboarding:** Automatically opens a first-run setup checklist on fresh install to verify your SPADA session, connect Google Calendar in one click, and run your first sync.
-- **Actionable Error Diagnostics:** Distinguishes SPADA session expiry, SPADA HTTP 403 access errors, Google Calendar rate limits, OAuth consent errors, and unsupported browsers into clear troubleshooting steps.
-- **Duplicate-Free Google Calendar Sync:** Creates deadline events in WIB (`Asia/Jakarta`) with H-1 day and H-3 hour popup reminders, and automatically updates events when you submit an assignment.
-- **Privacy First:** Runs 100% locally in your browser using your existing SPADA session. There is no developer backend server, no SPADA password collection, and no manual `refresh token` setup.
+The extension shares event metadata compatibility with the companion CLI tool `spada_calendar_sync`, allowing both tools to run without creating duplicate calendar entries.
 
 ---
 
-## Quick Links
+## Core Capabilities
 
-- **Students (3-step ZIP install — no Node.js & no Google Cloud Console):** [HOW_TO_RUN.md — For Students](HOW_TO_RUN.md#for-students--install-from-zip-3-steps-no-nodejs--no-google-cloud-console)
-- **Developers (Unpacked build, OAuth setup & packaging):** [HOW_TO_RUN.md — For Developers](HOW_TO_RUN.md#for-developers--build--prepare-unpacked-package-one-time-setup)
-- **Chrome Web Store Listing & Release Notes:** [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md)
+- **Full Course Assignment Scanning:** Fetches active courses and parses each course's `/mod/assign/index.php` table, including empty start-of-semester dashboards without false authentication errors.
+- **Submission Status Tracking:** Separates pending and submitted assignments and displays the pending count on the toolbar badge.
+- **Guided First-Run Onboarding:** Opens a three-step setup checklist automatically on initial installation to verify SPADA authentication, connect Google Calendar, and run the first synchronization.
+- **Service-Aware Error Diagnostics:** Classifies SPADA session errors, SPADA HTTP 403 access errors, Google Calendar rate limits, OAuth consent issues, and unsupported browsers into actionable remediation steps.
+- **Idempotent Google Calendar Sync:** Writes deadlines in `Asia/Jakarta` (WIB) with 24-hour and 3-hour popup reminders, updating existing events automatically upon submission.
+- **Local-Only Architecture:** Executes entirely within the browser using the user's existing SPADA session. No backend server is used, no SPADA credentials are collected, and no manual refresh token configuration is required.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Extension Platform | Chrome Extensions Manifest V3 (Service Worker, Content Script, Popup, Options, Onboarding) |
+| Language | TypeScript 5.6 (`strict`, ESM) |
+| User Interface | Vanilla HTML5, CSS3, standard DOM APIs (zero runtime UI dependencies) |
+| Bundler & Scripts | esbuild 0.24, Node.js (>= 22) |
+| Testing | Vitest 2.1 |
+| Integrations | Chrome Identity API (`chrome.identity`), Google Calendar REST API v3, SPADA Moodle HTML |
+
+---
+
+## Documentation
+
+- **End-User Installation (ZIP, no Node.js or Google Cloud Console required):** [HOW_TO_RUN.md](HOW_TO_RUN.md#end-user-installation-load-unpacked-zip)
+- **Developer Setup, Packaging, and Release Verification:** [HOW_TO_RUN.md](HOW_TO_RUN.md#developer-setup-and-packaging)
+- **Chrome Web Store Listing Metadata:** [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md)
 - **Privacy Policy:** [PRIVACY.md](PRIVACY.md)
 
 ---
@@ -33,46 +46,46 @@ The extension also automatically recognizes calendar events created by the compa
 
 ```text
 ├── config/
-│   └── unpacked-oauth.example.json   # Template for local unpacked OAuth config (real config is gitignored)
+│   └── unpacked-oauth.example.json   # Local unpacked OAuth config template (real config is gitignored)
 ├── public/
 │   ├── manifest.json                 # Chrome Web Store MV3 manifest (no "key" field)
-│   └── icons/                        # 16px, 48px, 128px extension icons
+│   └── icons/                        # Extension icons (16px, 48px, 128px)
 ├── scripts/
-│   ├── setup-unpacked.mjs            # Generates stable RSA-2048 public key + Extension ID config
-│   ├── unpacked-manifest.mjs         # Strict RSA-2048 SPKI validation & dual-target manifest composer
-│   ├── validate-manifest.mjs         # Store & Unpacked manifest validator
+│   ├── setup-unpacked.mjs            # Generates RSA-2048 SPKI public key and stable Extension ID
+│   ├── unpacked-manifest.mjs         # RSA-2048 SPKI validator and dual-target manifest composer
+│   ├── validate-manifest.mjs         # Store and Unpacked manifest validation rules
 │   ├── build.mjs                     # esbuild dual-target bundler (store / unpacked)
 │   └── package.mjs                   # Isolated-staging ZIP packager
 ├── src/
-│   ├── background/                   # Service worker, SPADA scanner, install lifecycle & session guards
+│   ├── background/                   # Service worker, SPADA scanner, lifecycle and session guards
 │   ├── calendar/                     # Google Calendar REST API v3 client
-│   ├── content/                      # SPADA active-course observer content script
-│   ├── onboarding/                   # Auto-opening 3-step guided setup wizard
-│   ├── options/                      # Extension settings & Extension ID copy panel
-│   ├── parsers/                      # SPADA Moodle HTML & date/status parsers
-│   ├── popup/                        # Toolbar popup UI
-│   ├── setup/                        # Setup readiness state machine & error diagnostics
-│   ├── shared/                       # Serialized chrome.storage.local state store
-│   └── sync/                         # Event formatter & duplicate-free diff planner
-└── tests/                            # Vitest unit & integration test suite
+│   ├── content/                      # SPADA active-course DOM observer
+│   ├── onboarding/                   # Three-step onboarding wizard
+│   ├── options/                      # Settings and Extension ID management page
+│   ├── parsers/                      # SPADA Moodle HTML, date, and status parsers
+│   ├── popup/                        # Toolbar popup interface
+│   ├── setup/                        # Setup readiness evaluation and error diagnostics
+│   ├── shared/                       # Serialized chrome.storage.local state layer
+│   └── sync/                         # Event formatter and diff planner
+└── tests/                            # Vitest unit and integration test suite
 ```
 
 ---
 
-## Permissions & Privacy
+## Permissions and Data Access
 
 | Permission / Host | Purpose |
 |---|---|
-| `storage` | Persists cached assignments, sync status, and user preferences locally in Chrome. |
-| `alarms` | Runs periodic background assignment checks every 3 hours while Chrome is open. |
-| `identity` | Requests a Google OAuth 2.0 token via Chrome sign-in (`calendar.events` scope only). |
-| `https://spada.upnyk.ac.id/*` | Reads active course links and `/mod/assign/index.php` pages using your existing SPADA session. |
-| `https://www.googleapis.com/*` | Lists, creates, and updates assignment events directly on your Google Calendar. |
+| `storage` | Persists scanned assignment summaries, sync state, and user settings locally. |
+| `alarms` | Schedules periodic background scans every 3 hours while Chrome is running. |
+| `identity` | Acquires a Google OAuth 2.0 access token via Chrome sign-in (`calendar.events` scope). |
+| `https://spada.upnyk.ac.id/*` | Reads active course links and `/mod/assign/index.php` tables using the active SPADA session. |
+| `https://www.googleapis.com/*` | Lists, creates, and updates synced assignment events on the user's Google Calendar. |
 
-See [PRIVACY.md](PRIVACY.md) for the complete privacy policy.
+For full disclosure details, refer to [PRIVACY.md](PRIVACY.md).
 
 ---
 
 ## License
 
-Licensed under the terms in [LICENSE](LICENSE).
+This project is licensed under the **MIT License** — Copyright (c) 2026 Nicolaus Narindra Lianto. See [LICENSE](LICENSE) for full license terms.

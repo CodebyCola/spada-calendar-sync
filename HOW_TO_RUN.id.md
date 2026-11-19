@@ -1,101 +1,101 @@
-# Panduan Menjalankan & Setup — SPADA UPNYK Assignment Scanner
+# Panduan Menjalankan dan Setup
 
-> 🌐 **Bahasa:** [English](HOW_TO_RUN.md) | **Bahasa Indonesia**  
-> 📘 **Ringkasan Proyek:** [README.id.md](README.id.md) | [README.md](README.md)
+Bahasa: [English](HOW_TO_RUN.md) | **Bahasa Indonesia**  
+Ringkasan Proyek: [README.id.md](README.id.md) | [README.md](README.md)
 
 ---
 
-## Untuk Mahasiswa — Cara Pasang dari ZIP (3 Langkah, Tanpa Node.js & Tanpa Google Cloud Console)
+## Instalasi Pengguna Akhir (Load Unpacked ZIP)
 
-> Pastikan kamu menggunakan **Google Chrome** yang sudah login ke profil Chrome. Kamu **tidak perlu** menginstal Node.js, tidak perlu membuka Google Cloud Console, dan tidak pernah perlu mengisi `refresh token` manual.
+Prasyarat: **Google Chrome** yang sudah login ke profil Chrome. Pengguna akhir tidak memerlukan Node.js, Google Cloud Console, maupun konfigurasi `refresh token` manual.
 
-### Langkah 1: Download & Ekstrak ZIP
-1. Download file rilis terbaru `spada-calendar-extension-unpacked-v*.zip` dari halaman [GitHub Releases](https://github.com/CodebyCola/spada-calendar-sync/releases).
-2. Klik kanan file ZIP → **Extract All...** ke folder permanen (misalnya `Documents/spada-calendar-extension`).
-   - **Penting:** Jangan hapus folder hasil ekstrak ini karena Chrome membaca ekstensi langsung dari folder tersebut.
+### 1. Unduh dan Ekstrak Arsip Rilis
+1. Unduh arsip terbaru `spada-calendar-extension-unpacked-v*.zip` dari halaman [GitHub Releases](https://github.com/CodebyCola/spada-calendar-sync/releases).
+2. Ekstrak arsip tersebut ke direktori lokal yang permanen (misalnya `Documents/spada-calendar-extension`).
+   - Jangan hapus direktori hasil ekstrak setelah pemasangan karena Chrome membaca ekstensi langsung dari lokasi tersebut.
 
-### Langkah 2: Pasang di Google Chrome (*Load Unpacked*)
+### 2. Pasang Ekstensi di Chrome
 1. Buka `chrome://extensions` di Google Chrome.
-2. Nyalakan sakelar **Developer mode** di pojok kanan atas.
-3. Klik **Load unpacked** lalu pilih folder hasil ekstrak tadi (folder yang di dalamnya langsung ada file `manifest.json`).
+2. Aktifkan **Developer mode** di pojok kanan atas.
+3. Pilih **Load unpacked** lalu pilih direktori hasil ekstrak yang memuat `manifest.json`.
 
-### Langkah 3: Ikuti Panduan Setup Otomatis (3 Langkah)
-Begitu terpasang, Chrome akan **otomatis membuka tab Panduan Setup**:
-1. **Login ke SPADA UPNYK:** Klik **Buka SPADA ↗**, login dengan akun mahasiswamu seperti biasa, lalu klik **Cek Sesi SPADA**.
-2. **Hubungkan Google Calendar:** Klik **Hubungkan Google** dan pilih akun Google milikmu sendiri.
-   - *Catatan:* Jika muncul layar peringatan *"Google hasn't verified this app"*, klik **Advanced** → **Go to SPADA UPNYK Assignment Scanner** untuk melanjutkan. Semua jadwal masuk langsung ke **Google Calendar milikmu sendiri**.
-3. **Sinkronisasi Pertama:** Klik **Scan & Sync Pertama**. Seluruh tenggat tugas aktif otomatis tersinkronisasi ke Google Calendar dengan pengingat popup H-1 hari & H-3 jam.
-4. Klik ikon puzzle (🧩) di pojok kanan atas Chrome lalu **Pin** ekstensi ini agar mudah dibuka kapan saja.
+### 3. Selesaikan Setup Awal
+Setelah pemasangan, Chrome akan membuka halaman Panduan Setup tiga langkah secara otomatis:
+1. **Verifikasi Sesi SPADA:** Buka `https://spada.upnyk.ac.id/my/`, login dengan akun mahasiswa, lalu klik **Cek Sesi SPADA**.
+2. **Hubungkan Google Calendar:** Klik **Hubungkan Google** dan pilih akun Google pribadi Anda.
+   - Jika Google menampilkan peringatan *"Google hasn't verified this app"*, pilih **Advanced** -> **Go to SPADA UPNYK Assignment Scanner**. Seluruh jadwal masuk langsung ke Google Calendar milik pengguna masing-masing.
+3. **Sinkronisasi Pertama:** Klik **Scan & Sync Pertama** untuk menambahkan tenggat tugas aktif beserta pengingat popup 24 jam dan 3 jam sebelumnya.
+4. Sematkan (*Pin*) ikon ekstensi dari menu ekstensi pada toolbar Chrome agar mudah diakses.
 
 ---
 
-## Untuk Developer — Menyiapkan Paket Unpacked (Sekali Saja)
+## Pengaturan dan Packaging Developer
 
 ### Prasyarat
-- **Node.js >= 22** dan **npm**
-- **Google Chrome** (untuk menguji `chrome.identity.getAuthToken`)
+- Node.js `>= 22` dan npm
+- Google Chrome (diperlukan untuk `chrome.identity.getAuthToken`)
 
-Konfigurasi distribusi *Load Unpacked* disimpan di `config/unpacked-oauth.json` (masuk `.gitignore`; lihat contoh di [config/unpacked-oauth.example.json](config/unpacked-oauth.example.json)) agar kunci publik & Client ID milikmu tidak terpakai oleh *fork* di repo publik. **Simpan cadangan file `config/unpacked-oauth.json` jika suatu saat pindah laptop.**
+Konfigurasi OAuth untuk distribusi unpacked disimpan di `config/unpacked-oauth.json` (masuk `.gitignore`; template tersedia di [config/unpacked-oauth.example.json](config/unpacked-oauth.example.json)) agar kuota OAuth tidak terpakai oleh *fork* repositori publik. Simpan cadangan file `config/unpacked-oauth.json` jika berpindah perangkat.
 
-### 1. Clone & Generate Stable Extension ID (Sekali Saja)
+### 1. Clone dan Inisialisasi Stable Extension ID (Sekali Saja)
 ```bash
 git clone https://github.com/CodebyCola/spada-calendar-sync.git
 cd spada-calendar-sync
 npm install
 npm run setup:unpacked
 ```
-Perintah ini membuat RSA-2048 SPKI DER *public key* (*private key* langsung dibuang di memori dan tidak pernah disimpan ke disk) serta menghitung **Stable Extension ID** 32 karakter yang selalu sama di semua laptop mahasiswa.
+Perintah ini membuat kunci publik RSA-2048 SPKI DER (kunci privat dibuang di memori dan tidak pernah ditulis ke disk) serta menurunkan Extension ID 32 karakter yang deterministik dan identik di seluruh perangkat pengguna.
 
-### 2. Buat 1 OAuth Client ID di Google Cloud Console (Sekali Saja)
-1. Buka [Google Cloud Console](https://console.cloud.google.com/), aktifkan **Google Calendar API**, dan atur **OAuth consent screen**.
-2. Masuk ke **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
-   - **Application type:** pilih **Chrome Extension**
-   - **Item ID:** tempel **Stable Extension ID** dari langkah 1.
-3. Simpan `Client ID` ke konfigurasi lokal:
+### 2. Daftarkan OAuth Client ID di Google Cloud Console (Sekali Saja)
+1. Buka [Google Cloud Console](https://console.cloud.google.com/), aktifkan **Google Calendar API**, dan konfigurasikan **OAuth consent screen**.
+2. Masuk ke **APIs & Services -> Credentials -> Create Credentials -> OAuth client ID**.
+   - **Application type:** Chrome Extension
+   - **Item ID:** masukkan Extension ID dari Langkah 1.
+3. Simpan Client ID ke konfigurasi lokal:
    ```bash
    npm run setup:unpacked -- --client-id <CLIENT_ID_DARI_GOOGLE>
    ```
-   *(Menjalankan ulang `npm run setup:unpacked` bersifat aman/idempoten dan tidak mengubah Extension ID. Gunakan `--reset-key` hanya jika memang sengaja ingin membuat Extension ID baru — flag tersebut otomatis me-reset `clientId` ke placeholder.)*
+   Menjalankan ulang `npm run setup:unpacked` mempertahankan kunci yang sudah ada. Gunakan `--reset-key` hanya jika ingin merotasi Extension ID secara sengaja (opsi ini juga mereset `clientId` kembali ke placeholder).
 
-### 3. Build & Kemas ZIP Siap Bagikan
+### 3. Build dan Kemas ZIP Unpacked
 ```bash
 npm run package:unpacked
 ```
-Perintah ini melakukan build di direktori staging temporer terisolasi, memvalidasi ketat public key RSA-2048 SPKI dan `clientId` non-placeholder, lalu menghasilkan:
-- `release/spada-calendar-extension-unpacked-v<version>.zip`
+Proses packaging berjalan pada direktori staging temporer terisolasi, menerapkan validasi ketat RSA-2048 SPKI dan OAuth non-placeholder, lalu menghasilkan `release/spada-calendar-extension-unpacked-v<version>.zip`.
 
-*(Untuk uji coba lokal cepat ke folder `dist/` sebelum memasukkan `Client ID` asli, jalankan `npm run build:unpacked`.)*
+Untuk build pengembangan lokal cepat ke `dist/` sebelum memasukkan `clientId` asli, jalankan `npm run build:unpacked`.
 
-### 4. Checklist Verifikasi Wajib Sebelum Membagikan ZIP (*Unpacked Release Acceptance*)
+### 4. Checklist Verifikasi Rilis Unpacked
 Sebelum mengunggah `release/spada-calendar-extension-unpacked-v<version>.zip` ke GitHub Releases:
-1. Ekstrak file ZIP final ke folder bersih (terpisah dari folder proyek).
-2. Buka **profil Chrome baru (*fresh profile*)** → `chrome://extensions` → nyalakan **Developer mode** → **Load unpacked** folder hasil ekstrak.
-3. Pastikan **Extension ID** yang tampil di `chrome://extensions` **sama persis** dengan `extensionId` di `config/unpacked-oauth.json` dan Google Cloud Console.
-4. Selesaikan halaman Onboarding yang otomatis terbuka (Langkah 1–3) termasuk **Hubungkan Google** memakai akun mahasiswa yang *eligible*, lalu pastikan event tugas muncul di Google Calendar akun tersebut.
+1. Ekstrak ZIP final ke direktori bersih di luar repositori proyek.
+2. Buka profil Google Chrome baru (*fresh profile*), buka `chrome://extensions`, aktifkan **Developer mode**, lalu muat direktori hasil ekstrak.
+3. Pastikan Extension ID pada `chrome://extensions` identik dengan `extensionId` di `config/unpacked-oauth.json` dan Google Cloud Console.
+4. Jalankan onboarding Langkah 1-3, termasuk otorisasi Google dengan akun mahasiswa yang memenuhi syarat, lalu pastikan event tugas tampil di Google Calendar akun tersebut.
 
 ---
 
-## Perintah Pengembangan, Pengujian & Build
+## Daftar Perintah
 
-```bash
-npm test                 # Jalankan seluruh unit & integration test (Vitest)
-npm run typecheck        # Cek tipe TypeScript ketat (tsc --noEmit)
-npm run build            # Build target Store ke dist/ (tanpa field "key")
-npm run build:unpacked   # Build target Unpacked ke dist/ (memakai config/unpacked-oauth.json)
-npm run package          # Kemas ZIP Store (mengizinkan placeholder dengan warning)
-npm run package:strict   # Kemas ZIP Store ketat (menolak placeholder atau Client ID unpacked)
-npm run package:unpacked # Kemas ZIP Unpacked untuk mahasiswa (selalu ketat OAuth + SPKI RSA-2048)
-```
+| Perintah | Deskripsi |
+|---|---|
+| `npm test` | Menjalankan seluruh unit dan integration test Vitest. |
+| `npm run typecheck` | Menjalankan pemeriksaan tipe TypeScript ketat (`tsc --noEmit`). |
+| `npm run build` | Membangun target Chrome Web Store ke `dist/` (menghapus `"key"`). |
+| `npm run build:unpacked` | Membangun target Unpacked ke `dist/` memakai `config/unpacked-oauth.json`. |
+| `npm run setup:unpacked` | Menginisialisasi atau memperbarui `config/unpacked-oauth.json` (`--client-id`, `--reset-key`). |
+| `npm run package` | Mengemas ZIP Store (memberi warning bila `client_id` masih placeholder). |
+| `npm run package:strict` | Mengemas ZIP Store secara ketat (menolak placeholder atau `client_id` unpacked). |
+| `npm run package:unpacked` | Mengemas ZIP Unpacked untuk mahasiswa (selalu ketat OAuth dan kunci RSA-2048 SPKI). |
 
 ---
 
-## Catatan Saat Publish ke Chrome Web Store
+## Rilis Chrome Web Store
 
-1. File [public/manifest.json](public/manifest.json) **khusus untuk Chrome Web Store** (tanpa field `"key"`). Saat Store menetapkan **Store Item ID** permanen, buat OAuth Client ID (Chrome Extension) khusus untuk Store Item ID tersebut dan pasang di `public/manifest.json` (jangan memakai ulang Client ID unpacked dari `config/unpacked-oauth.json`).
-2. Lihat panduan lengkap daftar isian toko, justifikasi izin, dan privasi di [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md).
-3. Jalankan verifikasi dan buat arsip Store yang bersih:
+1. [public/manifest.json](public/manifest.json) dikhususkan untuk build Chrome Web Store (tanpa field `"key"`). Daftarkan OAuth Client ID (Chrome Extension) terpisah untuk Store Item ID yang ditetapkan lalu simpan ke `public/manifest.json` (jangan memakai ulang Client ID unpacked).
+2. Periksa metadata listing toko dan justifikasi izin pada [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md).
+3. Jalankan validasi dan buat arsip rilis Store:
    ```bash
    npm test && npm run typecheck && npm run package:strict
    ```
    Hasil: `release/spada-calendar-extension-v<version>.zip`.
-4. Sebelum mempublikasikan ke Production, pasang versi Chrome Web Store (unlisted/testing) dan uji alur **Hubungkan Google** sampai berhasil dari instalasi Store tersebut.
+4. Sebelum dipublikasikan ke Production, pasang build Store (unlisted/testing) dan verifikasi alur login Google Calendar hingga berhasil.

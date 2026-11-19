@@ -1,101 +1,101 @@
-# How to Run & Set Up — SPADA UPNYK Assignment Scanner
+# How to Run and Set Up
 
-> 🌐 **Language:** **English** | [Bahasa Indonesia](HOW_TO_RUN.id.md)  
-> 📘 **Project Overview:** [README.md](README.md) | [README.id.md](README.id.md)
-
----
-
-## For Students — Install from ZIP (3 Steps, No Node.js & No Google Cloud Console)
-
-> Make sure you are using **Google Chrome** signed in to a Chrome profile. You do **not** need Node.js, you do **not** need to open Google Cloud Console, and you will **never** need to enter a manual `refresh token`.
-
-### Step 1: Download & Extract the ZIP
-1. Download the latest `spada-calendar-extension-unpacked-v*.zip` from [GitHub Releases](https://github.com/CodebyCola/spada-calendar-sync/releases).
-2. Right-click the ZIP file → **Extract All...** into a permanent folder (for example, `Documents/spada-calendar-extension`).
-   - **Important:** Do not delete this extracted folder — Chrome loads the unpacked extension directly from it.
-
-### Step 2: Load into Google Chrome (*Load Unpacked*)
-1. Open `chrome://extensions` in Google Chrome.
-2. Turn on **Developer mode** in the top-right corner.
-3. Click **Load unpacked** and select the extracted folder (the folder directly containing `manifest.json`).
-
-### Step 3: Complete the Auto-Opening 3-Step Setup Guide
-Once loaded, Chrome **automatically opens the Setup Guide tab**:
-1. **Sign in to SPADA UPNYK:** Click **Buka SPADA ↗**, log in with your student account as usual, then click **Cek Sesi SPADA**.
-2. **Connect Google Calendar:** Click **Hubungkan Google** and choose your own Google account.
-   - *Note:* If Google shows *"Google hasn't verified this app"*, click **Advanced** → **Go to SPADA UPNYK Assignment Scanner** to continue. Your events are synced strictly to **your own** Google Calendar.
-3. **First Sync:** Click **Scan & Sync Pertama**. All active assignment deadlines are synced to your Google Calendar with H-1 day and H-3 hour popup reminders.
-4. Click the puzzle icon (🧩) in Chrome's top-right toolbar and **Pin** the extension for quick access.
+Language: **English** | [Bahasa Indonesia](HOW_TO_RUN.id.md)  
+Project Overview: [README.md](README.md) | [README.id.md](README.id.md)
 
 ---
 
-## For Developers — Build & Prepare Unpacked Package (One-Time Setup)
+## End-User Installation (Load Unpacked ZIP)
+
+Requirements: **Google Chrome** signed in to a Chrome profile. Node.js, Google Cloud Console access, and manual refresh tokens are not required.
+
+### 1. Download and Extract the Release Archive
+1. Download the latest `spada-calendar-extension-unpacked-v*.zip` archive from [GitHub Releases](https://github.com/CodebyCola/spada-calendar-sync/releases).
+2. Extract the archive into a permanent local directory (for example, `Documents/spada-calendar-extension`).
+   - Do not delete this directory after installation; Chrome loads the extension directly from disk.
+
+### 2. Load the Extension in Chrome
+1. Navigate to `chrome://extensions` in Google Chrome.
+2. Enable **Developer mode** in the upper-right corner.
+3. Select **Load unpacked** and choose the extracted directory containing `manifest.json`.
+
+### 3. Complete Initial Setup
+After installation, Chrome opens the three-step Setup Guide automatically:
+1. **Verify SPADA Session:** Open `https://spada.upnyk.ac.id/my/`, sign in with your student account, and click **Cek Sesi SPADA**.
+2. **Connect Google Calendar:** Click **Hubungkan Google** and select your Google account.
+   - If Google displays an unverified-app warning (*"Google hasn't verified this app"*), select **Advanced** -> **Go to SPADA UPNYK Assignment Scanner**. Events are created strictly in your own Google Calendar.
+3. **Run Initial Sync:** Click **Scan & Sync Pertama** to publish active deadlines with 24-hour and 3-hour popup reminders.
+4. Pin the extension from the Chrome toolbar extensions menu for quick access.
+
+---
+
+## Developer Setup and Packaging
 
 ### Prerequisites
-- **Node.js >= 22** and **npm**
-- **Google Chrome** (for testing `chrome.identity.getAuthToken`)
+- Node.js `>= 22` and npm
+- Google Chrome (required for `chrome.identity.getAuthToken`)
 
-Unpacked distribution settings live in `config/unpacked-oauth.json` (gitignored; see [config/unpacked-oauth.example.json](config/unpacked-oauth.example.json)) so your public key and OAuth Client ID are not reused by forks of a public repository. **Back up `config/unpacked-oauth.json` if you switch machines.**
+Local unpacked OAuth configuration is stored in `config/unpacked-oauth.json` (gitignored; template available at [config/unpacked-oauth.example.json](config/unpacked-oauth.example.json)) to prevent forks from reusing your OAuth client quota. Keep a backup of `config/unpacked-oauth.json` when migrating machines.
 
-### 1. Clone & Generate a Stable Extension ID (One-Time)
+### 1. Clone and Initialize Stable Extension ID (One-Time)
 ```bash
 git clone https://github.com/CodebyCola/spada-calendar-sync.git
 cd spada-calendar-sync
 npm install
 npm run setup:unpacked
 ```
-This generates an RSA-2048 SPKI DER *public key* (the private key is discarded in memory and never written to disk) and derives a deterministic 32-character **Stable Extension ID** that stays identical across every student's computer.
+This command generates an RSA-2048 SPKI DER public key (the private key is discarded in memory and never written to disk) and calculates a deterministic 32-character Extension ID consistent across all installations.
 
-### 2. Create 1 Chrome Extension OAuth Client ID in Google Cloud Console (One-Time)
-1. Open [Google Cloud Console](https://console.cloud.google.com/), enable **Google Calendar API**, and configure your **OAuth consent screen**.
-2. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
-   - **Application type:** **Chrome Extension**
-   - **Item ID:** paste the **Stable Extension ID** printed in Step 1.
-3. Save the `Client ID` into your local config:
+### 2. Register OAuth Client ID in Google Cloud Console (One-Time)
+1. Open [Google Cloud Console](https://console.cloud.google.com/), enable **Google Calendar API**, and configure the **OAuth consent screen**.
+2. Navigate to **APIs & Services -> Credentials -> Create Credentials -> OAuth client ID**.
+   - **Application type:** Chrome Extension
+   - **Item ID:** paste the Extension ID output from Step 1.
+3. Persist the Client ID into your local unpacked configuration:
    ```bash
    npm run setup:unpacked -- --client-id <CLIENT_ID_FROM_GOOGLE>
    ```
-   *(Re-running `npm run setup:unpacked` is safe and idempotent — it never rotates an existing key. Pass `--reset-key` only if you intentionally want a new Extension ID, which also resets `clientId` back to a placeholder.)*
+   Re-running `npm run setup:unpacked` preserves the existing key. Pass `--reset-key` only when intentionally rotating the Extension ID (this also resets `clientId` back to a placeholder).
 
-### 3. Build & Package the Student ZIP
+### 3. Build and Package Unpacked ZIP
 ```bash
 npm run package:unpacked
 ```
-This builds into an isolated temporary staging directory, enforces strict RSA-2048 SPKI and non-placeholder OAuth validation, and outputs:
-- `release/spada-calendar-extension-unpacked-v<version>.zip`
+Packaging builds into an isolated temporary staging directory, enforces strict RSA-2048 SPKI and non-placeholder OAuth validation, and writes `release/spada-calendar-extension-unpacked-v<version>.zip`.
 
-*(For quick local Load Unpacked testing into `dist/` before adding your real `Client ID`, run `npm run build:unpacked`.)*
+For quick local development builds into `dist/` prior to setting a real `clientId`, run `npm run build:unpacked`.
 
-### 4. Mandatory Fresh-Profile Release Acceptance Check
-Before uploading `release/spada-calendar-extension-unpacked-v<version>.zip` to GitHub Releases:
-1. Extract the final ZIP into a clean folder outside this repository.
-2. Open a **fresh Google Chrome profile** → `chrome://extensions` → enable **Developer mode** → **Load unpacked** the extracted folder.
-3. Confirm the **Extension ID** shown in `chrome://extensions` **exactly matches** `extensionId` in `config/unpacked-oauth.json` and Google Cloud Console.
-4. Walk through the auto-opening Onboarding steps 1–3, including **Connect Google** using an eligible student account, and verify assignment events appear in that student's Google Calendar.
-
----
-
-## Development, Test & Build Commands
-
-```bash
-npm test                 # Run all unit & integration tests (Vitest)
-npm run typecheck        # Run strict TypeScript check (tsc --noEmit)
-npm run build            # Build Chrome Web Store target into dist/ (no "key" field)
-npm run build:unpacked   # Build Unpacked target into dist/ (injects key + clientId from config/unpacked-oauth.json)
-npm run package          # Package Store ZIP (allows placeholder client_id with warning)
-npm run package:strict   # Package Store ZIP (strict: rejects placeholder or unpacked client_id)
-npm run package:unpacked # Package Unpacked ZIP for students (always strict OAuth + RSA-2048 SPKI key)
-```
+### 4. Unpacked Release Acceptance Checklist
+Before publishing `release/spada-calendar-extension-unpacked-v<version>.zip` to GitHub Releases:
+1. Extract the final ZIP into a clean directory outside the repository.
+2. Open a fresh Google Chrome profile, navigate to `chrome://extensions`, enable **Developer mode**, and load the extracted directory.
+3. Verify the Extension ID displayed in `chrome://extensions` matches `extensionId` in `config/unpacked-oauth.json` and Google Cloud Console.
+4. Complete onboarding Steps 1-3, including Google OAuth authorization with an eligible student account, and confirm events appear in that account's Google Calendar.
 
 ---
 
-## Publishing to the Chrome Web Store
+## Commands
 
-1. [public/manifest.json](public/manifest.json) is reserved **exclusively for the Chrome Web Store** (no `"key"` field). Once Chrome Web Store assigns your permanent **Store Item ID**, create a dedicated Chrome Extension OAuth Client ID for that Store Item ID and set it in `public/manifest.json` (never reuse the unpacked Client ID from `config/unpacked-oauth.json`).
-2. Review store listing metadata, permission justifications, and privacy disclosures in [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md).
-3. Run verification and produce the clean Store archive:
+| Command | Description |
+|---|---|
+| `npm test` | Run the Vitest unit and integration test suite. |
+| `npm run typecheck` | Run strict TypeScript checking (`tsc --noEmit`). |
+| `npm run build` | Build the Chrome Web Store target into `dist/` (strips `"key"`). |
+| `npm run build:unpacked` | Build the Unpacked target into `dist/` using `config/unpacked-oauth.json`. |
+| `npm run setup:unpacked` | Initialize or update `config/unpacked-oauth.json` (`--client-id`, `--reset-key`). |
+| `npm run package` | Package a Store ZIP (warns on placeholder `client_id`). |
+| `npm run package:strict` | Package a Store ZIP strictly (rejects placeholder or unpacked `client_id`). |
+| `npm run package:unpacked` | Package an Unpacked student ZIP (always enforces strict OAuth and RSA-2048 SPKI key). |
+
+---
+
+## Chrome Web Store Release
+
+1. [public/manifest.json](public/manifest.json) is reserved exclusively for Chrome Web Store builds (without a `"key"` field). Register a dedicated Chrome Extension OAuth Client ID for the assigned Store Item ID and configure it in `public/manifest.json` (do not reuse the unpacked Client ID).
+2. Review store listing metadata and permission justifications in [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md).
+3. Validate and package the release archive:
    ```bash
    npm test && npm run typecheck && npm run package:strict
    ```
    Output: `release/spada-calendar-extension-v<version>.zip`.
-4. Before publishing to Production, install the Store build (unlisted/testing) and verify **Connect Google** succeeds end-to-end from the Store installation.
+4. Before releasing to Production, install the Store build (unlisted/testing) and verify Google Calendar sign-in end-to-end.

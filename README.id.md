@@ -1,30 +1,43 @@
-# SPADA UPNYK Assignment Scanner (Chrome Extension MV3)
+# SPADA UPNYK Assignment Scanner
 
-> 🌐 **Bahasa:** [English](README.md) | **Bahasa Indonesia**  
-> 🚀 **Panduan Pasang & Menjalankan:** [HOW_TO_RUN.id.md](HOW_TO_RUN.id.md) | [HOW_TO_RUN.md](HOW_TO_RUN.md)
+Bahasa: [English](README.md) | **Bahasa Indonesia**  
+Panduan Setup dan Eksekusi: [HOW_TO_RUN.id.md](HOW_TO_RUN.id.md) | [HOW_TO_RUN.md](HOW_TO_RUN.md)
 
-Ekstensi Google Chrome (Manifest V3) untuk memindai **semua tugas** di seluruh mata kuliah aktif pada **SPADA Wimaya UPN "Veteran" Yogyakarta** (`spada.upnyk.ac.id`) — **termasuk tugas yang tidak muncul di kalender bawaan Moodle / `.ics`** — beserta status pengumpulannya (`✅ Terkirim` vs `⏳ Belum`), lalu menyinkronkannya ke **Google Calendar** milikmu sendiri.
+Ekstensi Google Chrome berbasis Manifest V3 untuk memindai seluruh tugas pada mata kuliah aktif di **SPADA Wimaya UPN "Veteran" Yogyakarta** (`spada.upnyk.ac.id`) — termasuk tugas yang tidak muncul di kalender bawaan Moodle maupun feed `.ics` — memantau status pengumpulan, dan menyinkronkan tenggat waktu ke Google Calendar pribadi pengguna.
 
-Ekstensi ini juga otomatis mengenali *event* yang dibuat oleh proyek pendamping `spada_calendar_sync` (versi CLI) sehingga keduanya bisa dipakai bersamaan tanpa membuat jadwal duplikat.
+Ekstensi ini kompatibel dengan metadata event milik proyek pendamping `spada_calendar_sync` (CLI) sehingga keduanya dapat digunakan bersamaan tanpa menghasilkan jadwal duplikat.
 
 ---
 
 ## Fitur Utama
 
-- **Deteksi Tugas Menyeluruh:** Memindai seluruh mata kuliah aktif di SPADA UPNYK, termasuk tugas yang terlewat dari kalender bawaan Moodle (serta tetap berjalan aman saat dashboard SPADA masih kosong di awal semester/KRS).
-- **Status Pengumpulan & Badge Counter:** Memisahkan tugas yang belum dikumpulkan dari yang sudah terkirim, lengkap dengan penghitung tugas tertunda pada ikon ekstensi.
-- **Panduan Setup Otomatis (Onboarding 3 Langkah):** Terbuka otomatis saat pertama kali dipasang untuk mengecek sesi SPADA, menghubungkan Google Calendar dalam 1 klik, dan menjalankan sinkronisasi pertama.
-- **Diagnostik Error Ramah Mahasiswa:** Membedakan sesi SPADA habis, akses mata kuliah ditolak (SPADA HTTP 403), *rate limit* Google Calendar, error OAuth, dan browser yang tidak didukung menjadi langkah perbaikan berbahasa Indonesia.
-- **Sinkronisasi Google Calendar Anti-Duplikat:** Menambahkan tenggat tugas (WIB / `Asia/Jakarta`) dengan pengingat popup H-1 hari & H-3 jam, lalu otomatis memperbarui event saat tugas sudah dikumpulkan.
-- **Privasi Terjaga:** Berjalan 100% lokal di browser memakai sesi SPADA-mu sendiri. Tidak ada backend server developer, tidak ada penyimpanan username/password SPADA, dan tidak pernah meminta input `refresh token` manual.
+- **Pemindaian Tugas Menyeluruh:** Mengambil daftar mata kuliah aktif dan memindai tabel `/mod/assign/index.php` di setiap mata kuliah, termasuk menangani dashboard awal semester/KRS yang masih kosong tanpa error autentikasi palsu.
+- **Pelacakan Status Pengumpulan:** Memisahkan tugas yang belum dikumpulkan dan yang sudah terkirim, serta menampilkan jumlah tugas tertunda pada badge ikon ekstensi.
+- **Onboarding Terpandu Saat Instalasi Pertama:** Membuka halaman setup tiga langkah secara otomatis setelah pemasangan pertama untuk memverifikasi sesi SPADA, menghubungkan Google Calendar, dan menjalankan sinkronisasi awal.
+- **Diagnostik Error Berbasis Layanan:** Membedakan sesi SPADA habis, SPADA HTTP 403, batas permintaan (*rate limit*) Google Calendar, kendala izin OAuth, dan browser yang tidak didukung menjadi langkah perbaikan yang spesifik.
+- **Sinkronisasi Google Calendar Idempoten:** Menyimpan tenggat dalam zona waktu `Asia/Jakarta` (WIB) dengan pengingat popup 24 jam dan 3 jam sebelumnya, serta memperbarui event secara otomatis setelah tugas dikumpulkan.
+- **Arsitektur Lokal Tanpa Backend:** Berjalan sepenuhnya di browser menggunakan sesi SPADA pengguna. Tidak ada server backend developer, tidak ada penyimpanan kredensial SPADA, dan tidak memerlukan konfigurasi `refresh token` manual.
 
 ---
 
-## Tautan Cepat
+## Tech Stack
 
-- **Untuk Mahasiswa (Pasang 3 langkah dari ZIP — tanpa Node.js & tanpa Google Cloud Console):** [HOW_TO_RUN.id.md — Untuk Mahasiswa](HOW_TO_RUN.id.md#untuk-mahasiswa--cara-pasang-dari-zip-3-langkah-tanpa-nodejs--tanpa-google-cloud-console)
-- **Untuk Developer (Build unpacked, setup OAuth & packaging):** [HOW_TO_RUN.id.md — Untuk Developer](HOW_TO_RUN.id.md#untuk-developer--menyiapkan-paket-unpacked-sekali-saja)
-- **Daftar Isian & Catatan Chrome Web Store:** [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md)
+| Lapisan | Teknologi |
+|---|---|
+| Platform Ekstensi | Chrome Extensions Manifest V3 (Service Worker, Content Script, Popup, Options, Onboarding) |
+| Bahasa | TypeScript 5.6 (`strict`, ESM) |
+| Antarmuka | Vanilla HTML5, CSS3, DOM API standar (tanpa dependensi framework UI runtime) |
+| Bundler & Skrip | esbuild 0.24, Node.js (>= 22) |
+| Pengujian | Vitest 2.1 |
+| Integrasi | Chrome Identity API (`chrome.identity`), Google Calendar REST API v3, HTML Moodle SPADA |
+
+---
+
+## Dokumentasi
+
+- **Instalasi Pengguna Akhir (ZIP, tanpa Node.js dan tanpa Google Cloud Console):** [HOW_TO_RUN.id.md](HOW_TO_RUN.id.md#instalasi-pengguna-akhir-load-unpacked-zip)
+- **Pengaturan Developer, Packaging, dan Verifikasi Rilis:** [HOW_TO_RUN.id.md](HOW_TO_RUN.id.md#pengaturan-dan-packaging-developer)
+- **Metadata Listing Chrome Web Store:** [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md)
 - **Kebijakan Privasi:** [PRIVACY.md](PRIVACY.md)
 
 ---
@@ -33,46 +46,46 @@ Ekstensi ini juga otomatis mengenali *event* yang dibuat oleh proyek pendamping 
 
 ```text
 ├── config/
-│   └── unpacked-oauth.example.json   # Template config OAuth unpacked lokal (file asli di-gitignore)
+│   └── unpacked-oauth.example.json   # Template konfigurasi OAuth unpacked (file asli di-gitignore)
 ├── public/
 │   ├── manifest.json                 # Manifest MV3 khusus Chrome Web Store (tanpa field "key")
-│   └── icons/                        # Ikon ekstensi 16px, 48px, 128px
+│   └── icons/                        # Ikon ekstensi (16px, 48px, 128px)
 ├── scripts/
-│   ├── setup-unpacked.mjs            # Membuat public key RSA-2048 & Stable Extension ID
-│   ├── unpacked-manifest.mjs         # Validasi ketat RSA-2048 SPKI & komposer manifest dual-target
-│   ├── validate-manifest.mjs         # Validator manifest target Store & Unpacked
+│   ├── setup-unpacked.mjs            # Generator public key RSA-2048 SPKI dan Stable Extension ID
+│   ├── unpacked-manifest.mjs         # Validator RSA-2048 SPKI dan komposer manifest dual-target
+│   ├── validate-manifest.mjs         # Aturan validasi manifest target Store dan Unpacked
 │   ├── build.mjs                     # Bundler esbuild dual-target (store / unpacked)
 │   └── package.mjs                   # Packager ZIP dengan direktori staging terisolasi
 ├── src/
-│   ├── background/                   # Service worker, scanner SPADA, install lifecycle & session guard
+│   ├── background/                   # Service worker, scanner SPADA, lifecycle dan session guard
 │   ├── calendar/                     # Client Google Calendar REST API v3
-│   ├── content/                      # Content script pemantau mata kuliah aktif di SPADA
-│   ├── onboarding/                   # Halaman Panduan Setup 3 langkah otomatis saat fresh install
-│   ├── options/                      # Halaman Pengaturan & tombol Salin Extension ID
-│   ├── parsers/                      # Parser HTML SPADA Moodle, tenggat, & status pengumpulan
-│   ├── popup/                        # Antarmuka popup ikon ekstensi
-│   ├── setup/                        # State machine kesiapan setup & diagnostik error
-│   ├── shared/                       # Store chrome.storage.local terserialisasi
-│   └── sync/                         # Formatter event & perencana diff anti-duplikat
-└── tests/                            # Suite unit & integration test (Vitest)
+│   ├── content/                      # Observer DOM mata kuliah aktif SPADA
+│   ├── onboarding/                   # Halaman panduan setup tiga langkah
+│   ├── options/                      # Halaman pengaturan dan penyalinan Extension ID
+│   ├── parsers/                      # Parser HTML, tanggal, dan status tugas Moodle SPADA
+│   ├── popup/                        # Antarmuka popup toolbar
+│   ├── setup/                        # Evaluasi kesiapan setup dan diagnostik error
+│   ├── shared/                       # Lapisan state chrome.storage.local terserialisasi
+│   └── sync/                         # Formatter event dan perencana diff
+└── tests/                            # Suite unit dan integration test (Vitest)
 ```
 
 ---
 
-## Izin & Privasi
+## Izin dan Akses Data
 
 | Izin / Host | Tujuan |
 |---|---|
-| `storage` | Menyimpan cache daftar tugas, status sync, dan preferensi pengguna secara lokal di Chrome. |
-| `alarms` | Menjadwalkan pemindaian otomatis tiap 3 jam selama Chrome terbuka. |
-| `identity` | Meminta token Google OAuth 2.0 melalui login Chrome (hanya scope `calendar.events`). |
-| `https://spada.upnyk.ac.id/*` | Membaca daftar mata kuliah aktif dan halaman `/mod/assign/index.php` memakai sesi login SPADA-mu. |
-| `https://www.googleapis.com/*` | Mendaftar, membuat, dan memperbarui event tugas langsung pada Google Calendar milikmu. |
+| `storage` | Menyimpan ringkasan hasil scan, status sinkronisasi, dan preferensi pengguna secara lokal. |
+| `alarms` | Menjadwalkan pemindaian latar belakang setiap 3 jam selama Chrome berjalan. |
+| `identity` | Meminta token akses Google OAuth 2.0 melalui login Chrome (hanya scope `calendar.events`). |
+| `https://spada.upnyk.ac.id/*` | Membaca tautan mata kuliah aktif dan tabel `/mod/assign/index.php` memakai sesi SPADA aktif. |
+| `https://www.googleapis.com/*` | Membaca, membuat, dan memperbarui event tugas pada Google Calendar pengguna. |
 
-Lihat [PRIVACY.md](PRIVACY.md) untuk kebijakan privasi lengkap.
+Rincian lengkap tersedia di [PRIVACY.md](PRIVACY.md).
 
 ---
 
 ## Lisensi
 
-Dirilis di bawah lisensi pada berkas [LICENSE](LICENSE).
+Proyek ini dirilis di bawah **MIT License** — Copyright (c) 2026 Nicolaus Narindra Lianto. Lihat [LICENSE](LICENSE) untuk ketentuan lengkapnya.
