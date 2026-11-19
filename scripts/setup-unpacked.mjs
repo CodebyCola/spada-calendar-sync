@@ -31,18 +31,27 @@ export function generateRsaPublicKeyBase64() {
 export function prepareUnpackedConfig(existingConfig, options = {}) {
   const resetKey = options.resetKey ?? false;
   const generatePublicKey = options.generatePublicKey ?? generateRsaPublicKeyBase64;
+  const hasExistingConfig = existingConfig !== null && existingConfig !== undefined;
 
-  let hasValidExistingKey = false;
-  if (!resetKey && existingConfig && typeof existingConfig.publicKey === "string") {
+  let publicKey;
+  if (hasExistingConfig && !resetKey) {
+    const existingPublicKey =
+      typeof existingConfig === "object" && typeof existingConfig.publicKey === "string"
+        ? existingConfig.publicKey
+        : "";
     try {
-      deriveExtensionIdFromPublicKey(existingConfig.publicKey);
-      hasValidExistingKey = true;
-    } catch {
-      hasValidExistingKey = false;
+      deriveExtensionIdFromPublicKey(existingPublicKey);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Existing ${UNPACKED_CONFIG_REL_PATH} has an invalid or corrupted publicKey (${reason}). Restore it from your backup, or run with --reset-key explicitly to generate a new Extension ID (which also resets clientId).`
+      );
     }
+    publicKey = existingPublicKey;
+  } else {
+    publicKey = generatePublicKey();
   }
 
-  const publicKey = hasValidExistingKey ? existingConfig.publicKey : generatePublicKey();
   const extensionId = deriveExtensionIdFromPublicKey(publicKey);
 
   let clientId;

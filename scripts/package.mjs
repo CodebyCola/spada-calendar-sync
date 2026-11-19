@@ -1,8 +1,14 @@
-import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+import { buildExtension } from "./build.mjs";
 import { UNPACKED_CONFIG_REL_PATH } from "./setup-unpacked.mjs";
 import { validateManifestForStore } from "./validate-manifest.mjs";
+
+const execFileAsync = promisify(execFile);
 
 function parseTarget(argv) {
   for (let i = 0; i < argv.length; i++) {
@@ -17,92 +23,136 @@ function parseTarget(argv) {
   return "store";
 }
 
-const args = process.argv.slice(2);
-const target = parseTarget(args);
-if (target !== "store" && target !== "unpacked") {
-  console.error(`[ERROR] Unsupported --target "${target}". Use "store" or "unpacked".`);
-  process.exit(1);
-}
+/**
+ * Packages an extension ZIP using a dedicated isolated temporary staging directory
+ * so concurrent store and unpacked packaging processes cannot cross-contaminate outputs.
+ * @param {{
+ *   target?: "store" | "unpacked";
+ *   strictOAuth?: boolean;
+ *   releaseDir?: string;
+ *   unpackedConfig?: any;
+ *   unpackedConfigPath?: string;
+ *   baseManifestPath?: string;
+ * }} [options]
+ * @returns {Promise<{ outZip: string; target: "store" | "unpacked"; warnings: string[] }>}
+ */
+export async function packageExtension(options = {}) {
+  const target = options.target ?? "store";
+  if (target !== "store" && target !== "unpacked") {
+    throw new Error(`Unsupported --target "${target}". Use "store" or "unpacked".`);
+  }
 
-const strictOAuth = target === "unpacked" ? true : args.includes("--strict");
+  const strictOAuth = options.strictOAuth ?? (target === "unpacked");
+  const cwd = process.cwd();
+  const stagingDir = mkdtempSync(join(tmpdir(), `spada-ext-${target}-`));
 
-// 1. Always build fresh dist/ for the requested target
-execSync(`node scripts/build.mjs --target=${target}`, { stdio: "inherit" });
+  try {
+    // 1. Build into isolated staging directory (never mutates shared dist/)
+    const built = await buildExtension({
+      target,
+      outDir: stagingDir,
+      unpackedConfig: target === "unpacked" ? options.unpackedConfig : undefined,
+      unpackedConfigPath: options.unpackedConfigPath,
+      baseManifestPath: options.baseManifestPath,
+    });
 
-const distDir = join(process.cwd(), "dist");
-const manifestPath = join(distDir, "manifest.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const manifestPath = join(stagingDir, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
-// 2. Guard against reusing local unpacked OAuth client ID in Store releases
-const disallowedClientIds = [];
-if (target === "store") {
-  const unpackedPath = join(process.cwd(), UNPACKED_CONFIG_REL_PATH);
-  if (existsSync(unpackedPath)) {
-    try {
-      const unpacked = JSON.parse(readFileSync(unpackedPath, "utf8"));
-      if (typeof unpacked?.clientId === "string" && unpacked.clientId.trim()) {
-        disallowedClientIds.push(unpacked.clientId.trim());
+    // 2. Guard against reusing local unpacked OAuth client ID in Store releases
+    const disallowedClientIds = [];
+    if (target === "store") {
+      if (typeof options.unpackedConfig?.clientId === "string" && options.unpackedConfig.clientId.trim()) {
+        disallowedClientIds.push(options.unpackedConfig.clientId.trim());
+      } else {
+        const unpackedPath = resolve(cwd, options.unpackedConfigPath ?? UNPACKED_CONFIG_REL_PATH);
+        if (existsSync(unpackedPath)) {
+          try {
+            const unpacked = JSON.parse(readFileSync(unpackedPath, "utf8"));
+            if (typeof unpacked?.clientId === "string" && unpacked.clientId.trim()) {
+              disallowedClientIds.push(unpacked.clientId.trim());
+            }
+          } catch {
+            // Ignore malformed local unpacked config when packaging store target
+          }
+        }
       }
-    } catch {
-      // Ignore malformed local unpacked config when packaging store target
     }
+
+    // 3. Validate manifest metadata from the exact stagingDir that will be archived
+    const { errors, warnings } = validateManifestForStore(manifest, {
+      strictOAuth,
+      target,
+      disallowedClientIds,
+    });
+    const allWarnings = [...built.warnings, ...warnings];
+
+    // 4. Verify all referenced files & onboarding assets inside stagingDir exist
+    const referencedFiles = [
+      ...Object.values(manifest.icons ?? {}),
+      ...Object.values(manifest.action?.default_icon ?? {}),
+      manifest.action?.default_popup,
+      manifest.background?.service_worker,
+      manifest.options_page,
+      "onboarding/onboarding.html",
+      "onboarding/onboarding.css",
+      "onboarding/onboarding.js",
+      ...(manifest.content_scripts ?? []).flatMap((cs) => cs.js ?? []),
+    ].filter(Boolean);
+
+    for (const relPath of referencedFiles) {
+      if (!existsSync(join(stagingDir, relPath))) {
+        errors.push(`Referenced asset missing in staging directory: ${relPath}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(errors.join("\n"));
+    }
+
+    // 5. Create clean ZIP containing ONLY this isolated stagingDir's contents
+    const releaseDir = resolve(cwd, options.releaseDir ?? "release");
+    mkdirSync(releaseDir, { recursive: true });
+    const zipName =
+      target === "unpacked"
+        ? `spada-calendar-extension-unpacked-v${manifest.version}.zip`
+        : `spada-calendar-extension-v${manifest.version}.zip`;
+    const outZip = join(releaseDir, zipName);
+    rmSync(outZip, { force: true });
+
+    if (process.platform === "win32") {
+      const escapedStaging = stagingDir.replace(/'/g, "''");
+      const escapedZip = outZip.replace(/'/g, "''");
+      await execFileAsync("powershell", [
+        "-NoProfile",
+        "-Command",
+        `Compress-Archive -Path '${escapedStaging}\\*' -DestinationPath '${escapedZip}' -Force`,
+      ]);
+    } else {
+      await execFileAsync("zip", ["-r", outZip, "."], { cwd: stagingDir });
+    }
+
+    return { outZip, target, warnings: allWarnings };
+  } finally {
+    rmSync(stagingDir, { recursive: true, force: true });
   }
 }
 
-// 3. Validate manifest metadata
-const { errors, warnings } = validateManifestForStore(manifest, {
-  strictOAuth,
-  target,
-  disallowedClientIds,
-});
-
-// 4. Verify all referenced files & onboarding assets inside dist/ exist
-const referencedFiles = [
-  ...Object.values(manifest.icons ?? {}),
-  ...Object.values(manifest.action?.default_icon ?? {}),
-  manifest.action?.default_popup,
-  manifest.background?.service_worker,
-  manifest.options_page,
-  "onboarding/onboarding.html",
-  "onboarding/onboarding.css",
-  "onboarding/onboarding.js",
-  ...(manifest.content_scripts ?? []).flatMap((cs) => cs.js ?? []),
-].filter(Boolean);
-
-for (const relPath of referencedFiles) {
-  if (!existsSync(join(distDir, relPath))) {
-    errors.push(`Referenced asset missing in dist/: ${relPath}`);
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  try {
+    const args = process.argv.slice(2);
+    const target = /** @type {"store" | "unpacked"} */ (parseTarget(args));
+    const strictOAuth = target === "unpacked" ? true : args.includes("--strict");
+    const result = await packageExtension({ target, strictOAuth });
+    for (const w of result.warnings) {
+      console.warn(`[WARN] ${w}`);
+    }
+    console.log(`\nPackaged ${result.target} ZIP: ${result.outZip}`);
+  } catch (err) {
+    const lines = (err instanceof Error ? err.message : String(err)).split("\n");
+    for (const line of lines) {
+      console.error(`[ERROR] ${line}`);
+    }
+    process.exit(1);
   }
 }
-
-for (const w of warnings) {
-  console.warn(`[WARN] ${w}`);
-}
-
-if (errors.length > 0) {
-  for (const e of errors) {
-    console.error(`[ERROR] ${e}`);
-  }
-  process.exit(1);
-}
-
-// 5. Create clean ZIP containing ONLY dist/ contents
-const releaseDir = join(process.cwd(), "release");
-mkdirSync(releaseDir, { recursive: true });
-const zipName =
-  target === "unpacked"
-    ? `spada-calendar-extension-unpacked-v${manifest.version}.zip`
-    : `spada-calendar-extension-v${manifest.version}.zip`;
-const outZip = join(releaseDir, zipName);
-rmSync(outZip, { force: true });
-
-if (process.platform === "win32") {
-  execSync(
-    `powershell -NoProfile -Command "Compress-Archive -Path '${distDir}\\*' -DestinationPath '${outZip}' -Force"`,
-    { stdio: "inherit" }
-  );
-} else {
-  execSync(`cd "${distDir}" && zip -r "${outZip}" .`, { stdio: "inherit" });
-}
-
-console.log(`\nPackaged ${target} ZIP: ${outZip}`);

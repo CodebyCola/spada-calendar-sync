@@ -1,13 +1,16 @@
 import type { SpadaCourse } from "../parsers/spada-html.js";
 import { getStoredState, updateStoredState, type StoredExtensionState } from "../shared/storage.js";
 import {
-  buildDisconnectedStatePatch,
   countPendingAssignments,
   handleExtensionInstalled,
   revalidateLegacyGoogleAuth,
+  runDisconnectGoogle,
+  runSessionGuardedConnect,
+  runSessionGuardedSync,
 } from "./install-lifecycle.js";
 import {
   isOAuthClientConfigured,
+  requestChromeAuthToken,
   scanSpadaWithFetcher,
   syncAssignmentsToGoogleCalendar,
 } from "./scanner.js";
@@ -37,7 +40,11 @@ async function revalidateStateIfNeeded(
 ): Promise<StoredExtensionState> {
   return revalidateLegacyGoogleAuth(state, {
     oauthConfigured: isOAuthClientConfigured(),
+    getState: getStoredState,
     getSilentToken: async () => {
+      if (typeof chrome.identity?.getAuthToken !== "function") {
+        return null;
+      }
       const result = await chrome.identity.getAuthToken({ interactive: false });
       return result.token ?? null;
     },
@@ -64,28 +71,14 @@ async function performScan(seedCourses?: SpadaCourse[]): Promise<void> {
   }
 }
 
-async function performSync(interactive: boolean): Promise<void> {
-  const state = await getStoredState();
-  try {
-    const summary = await syncAssignmentsToGoogleCalendar(
-      state.assignments,
-      state.settings,
-      interactive
-    );
-    await updateStoredState({
-      googleConnected: true,
-      googleAuthVerified: true,
-      lastSyncAt: new Date().toISOString(),
-      lastSyncSummary: summary,
-      lastSyncError: null,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await updateStoredState({
-      lastSyncError: message,
-    });
-    throw err;
-  }
+async function performSync(interactive: boolean, expectedGeneration?: number): Promise<void> {
+  await runSessionGuardedSync({
+    getState: getStoredState,
+    updateState: updateStoredState,
+    expectedGeneration,
+    runSync: (state) =>
+      syncAssignmentsToGoogleCalendar(state.assignments, state.settings, interactive),
+  });
 }
 
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -136,48 +129,47 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       }
 
       if (message.type === "CONNECT_GOOGLE") {
-        try {
-          if (!isOAuthClientConfigured()) {
-            throw new Error(
-              "OAUTH_NOT_CONFIGURED: Isi oauth2.client_id di manifest.json dulu sebelum menghubungkan Google."
-            );
-          }
-          const tokenRes = await chrome.identity.getAuthToken({ interactive: true });
-          if (!tokenRes.token) {
-            throw new Error("Gagal menghubungkan akun Google.");
-          }
-          const state = await updateStoredState({
-            googleConnected: true,
-            googleAuthVerified: true,
-            lastSyncError: null,
-          });
-          sendResponse({ ok: true, state, oauthConfigured: true });
-          return;
-        } catch (err) {
-          const messageText = err instanceof Error ? err.message : String(err);
-          await updateStoredState({ lastSyncError: messageText });
-          throw err;
-        }
+        const result = await runSessionGuardedConnect({
+          getState: getStoredState,
+          updateState: updateStoredState,
+          requestToken: async () => {
+            if (!isOAuthClientConfigured()) {
+              throw new Error(
+                "OAUTH_NOT_CONFIGURED: Isi oauth2.client_id di manifest.json dulu sebelum menghubungkan Google."
+              );
+            }
+            return requestChromeAuthToken(true);
+          },
+        });
+        sendResponse({ ok: true, state: result.state, oauthConfigured: isOAuthClientConfigured() });
+        return;
       }
 
       if (message.type === "DISCONNECT_GOOGLE") {
-        try {
-          const tokenRes = await chrome.identity.getAuthToken({ interactive: false });
-          if (tokenRes.token) {
-            await chrome.identity.removeCachedAuthToken({ token: tokenRes.token });
-            await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${tokenRes.token}`);
-          }
-        } catch {
-          // Ignore if no token is cached
-        }
-        const state = await updateStoredState(buildDisconnectedStatePatch());
+        const state = await runDisconnectGoogle({
+          getState: getStoredState,
+          updateState: updateStoredState,
+          revokeCachedToken: async () => {
+            if (typeof chrome.identity?.getAuthToken !== "function") {
+              return;
+            }
+            const tokenRes = await chrome.identity.getAuthToken({ interactive: false });
+            if (tokenRes.token) {
+              if (typeof chrome.identity.removeCachedAuthToken === "function") {
+                await chrome.identity.removeCachedAuthToken({ token: tokenRes.token });
+              }
+              await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${tokenRes.token}`);
+            }
+          },
+        });
         sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
         return;
       }
 
       if (message.type === "SYNC_NOW") {
+        const startGeneration = (await getStoredState()).googleSessionGeneration;
         await performScan();
-        await performSync(true);
+        await performSync(true, startGeneration);
         const state = await getStoredState();
         sendResponse({ ok: true, state, oauthConfigured: isOAuthClientConfigured() });
         return;

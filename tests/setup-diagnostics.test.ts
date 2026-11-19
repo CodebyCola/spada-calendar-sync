@@ -14,6 +14,7 @@ function makeState(overrides: Partial<StoredExtensionState> = {}): StoredExtensi
     lastSyncError: null,
     googleConnected: false,
     googleAuthVerified: false,
+    googleSessionGeneration: 0,
     settings: { ...DEFAULT_SETTINGS },
     ...overrides,
   };
@@ -88,6 +89,12 @@ describe("diagnoseSetupError", () => {
     );
     expect(diagnoseSetupError("The user is not signed in.").code).toBe("BROWSER_UNSUPPORTED");
     expect(diagnoseSetupError("The user turned off browser signin").code).toBe("BROWSER_UNSUPPORTED");
+    expect(
+      diagnoseSetupError("BROWSER_UNSUPPORTED: chrome.identity.getAuthToken tidak tersedia.").code
+    ).toBe("BROWSER_UNSUPPORTED");
+    expect(diagnoseSetupError("chrome.identity.getAuthToken is not a function").code).toBe(
+      "BROWSER_UNSUPPORTED"
+    );
     expect(diagnoseSetupError("OAuth2 request failed: Service unavailable.").code).toBe(
       "NETWORK_OR_SERVER"
     );

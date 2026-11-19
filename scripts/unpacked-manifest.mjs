@@ -1,9 +1,10 @@
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey } from "node:crypto";
 
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 
 /**
- * Derives a Chromium 32-character ('a'-'p') extension ID from a base64 DER public key.
+ * Validates that base64 bytes represent an RSA-2048 SPKI DER public key (rejecting PKCS#8 private keys
+ * and arbitrary payloads), then derives Chromium's 32-character ('a'-'p') extension ID.
  * @param {string} publicKeyBase64
  * @returns {string}
  */
@@ -19,6 +20,25 @@ export function deriveExtensionIdFromPublicKey(publicKeyBase64) {
   const derBytes = Buffer.from(publicKeyBase64, "base64");
   if (derBytes.length === 0 || derBytes.toString("base64") !== publicKeyBase64) {
     throw new Error("Public key must be a valid canonical base64 string.");
+  }
+
+  let parsedKey;
+  try {
+    parsedKey = createPublicKey({ key: derBytes, format: "der", type: "spki" });
+  } catch {
+    throw new Error(
+      "Public key must be a valid DER-encoded SPKI RSA-2048 public key (private keys and arbitrary base64 payloads are rejected)."
+    );
+  }
+
+  if (parsedKey.type !== "public" || parsedKey.asymmetricKeyType !== "rsa") {
+    throw new Error("Public key must be an RSA SPKI public key.");
+  }
+
+  if (parsedKey.asymmetricKeyDetails?.modulusLength !== 2048) {
+    throw new Error(
+      `Public key must be an RSA-2048 SPKI public key (got ${String(parsedKey.asymmetricKeyDetails?.modulusLength ?? "unknown")}-bit).`
+    );
   }
 
   const digest = createHash("sha256").update(derBytes).digest();

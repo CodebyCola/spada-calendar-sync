@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isConfiguredOAuthClientId,
+  requestChromeAuthToken,
   scanSpadaWithFetcher,
   syncAssignmentsToGoogleCalendar,
 } from "../src/background/scanner.js";
@@ -128,5 +129,12 @@ describe("syncAssignmentsToGoogleCalendar", () => {
 
     expect(tokenCalls).toBe(1);
     expect(summary).toEqual({ created: 0, updated: 0, skipped: 0 });
+  });
+});
+
+describe("requestChromeAuthToken", () => {
+  it("Throws explicit BROWSER_UNSUPPORTED error when chrome.identity.getAuthToken is unavailable", async () => {
+    await expect(requestChromeAuthToken(true, {})).rejects.toThrow(/BROWSER_UNSUPPORTED/);
+    await expect(requestChromeAuthToken(true, undefined)).rejects.toThrow(/BROWSER_UNSUPPORTED/);
   });
 });

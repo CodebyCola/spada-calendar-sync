@@ -3,7 +3,11 @@ import {
   buildDisconnectedStatePatch,
   handleExtensionInstalled,
   revalidateLegacyGoogleAuth,
+  runDisconnectGoogle,
+  runSessionGuardedConnect,
+  runSessionGuardedSync,
 } from "../src/background/install-lifecycle.js";
+import { evaluateSetupStatus } from "../src/setup/setup-diagnostics.js";
 import { DEFAULT_SETTINGS, type StoredExtensionState } from "../src/shared/storage.js";
 
 function makeState(overrides: Partial<StoredExtensionState> = {}): StoredExtensionState {
@@ -17,16 +21,18 @@ function makeState(overrides: Partial<StoredExtensionState> = {}): StoredExtensi
     lastSyncError: null,
     googleConnected: false,
     googleAuthVerified: false,
+    googleSessionGeneration: 0,
     settings: { ...DEFAULT_SETTINGS },
     ...overrides,
   };
 }
 
 describe("buildDisconnectedStatePatch", () => {
-  it("Clears googleConnected, googleAuthVerified, lastSyncAt, lastSyncSummary, and lastSyncError", () => {
-    expect(buildDisconnectedStatePatch()).toEqual({
+  it("Clears googleConnected, googleAuthVerified, lastSyncAt, lastSyncSummary, lastSyncError and increments generation", () => {
+    expect(buildDisconnectedStatePatch(2)).toEqual({
       googleConnected: false,
       googleAuthVerified: false,
+      googleSessionGeneration: 3,
       lastSyncAt: null,
       lastSyncSummary: null,
       lastSyncError: null,
@@ -216,5 +222,106 @@ describe("handleExtensionInstalled", () => {
     });
 
     expect(chromeUpdateEvents).toEqual(["alarm", "badge:0"]);
+  });
+});
+
+describe("Google session concurrency & legacy disconnect migration", () => {
+  it("Prevents an in-flight SYNC_NOW from resurrecting Google connection after DISCONNECT_GOOGLE completes", async () => {
+    let store = makeState({
+      lastScanAt: "2026-11-19T00:00:00.000Z",
+      googleConnected: true,
+      googleAuthVerified: true,
+      googleSessionGeneration: 1,
+    });
+
+    const getState = async () => store;
+    const updateState = async (patch: Partial<StoredExtensionState>) => {
+      store = { ...store, ...patch };
+      return store;
+    };
+
+    let releaseSync!: (summary: { created: number; updated: number; skipped: number }) => void;
+    const heldSyncPromise = new Promise<{ created: number; updated: number; skipped: number }>(
+      (resolve) => {
+        releaseSync = resolve;
+      }
+    );
+
+    // 1. Start SYNC_NOW and hold it mid-flight
+    const syncTask = runSessionGuardedSync({
+      getState,
+      updateState,
+      runSync: () => heldSyncPromise,
+    });
+
+    // 2. While sync is suspended, user clicks Disconnect ("Putuskan")
+    await runDisconnectGoogle({
+      getState,
+      updateState,
+      revokeCachedToken: async () => {},
+    });
+
+    expect(store.googleConnected).toBe(false);
+    expect(store.googleAuthVerified).toBe(false);
+    expect(store.googleSessionGeneration).toBe(2);
+
+    // 3. Release the stale in-flight sync
+    releaseSync({ created: 3, updated: 0, skipped: 0 });
+    const syncOutcome = await syncTask;
+
+    expect(syncOutcome.stale).toBe(true);
+    expect(store.googleConnected).toBe(false);
+    expect(store.googleAuthVerified).toBe(false);
+    expect(store.lastSyncAt).toBeNull();
+    expect(store.lastSyncSummary).toBeNull();
+
+    // Also verifies pre-sync abort if disconnect happened during SCAN before runSync started
+    let runSyncCalled = false;
+    const preAborted = await runSessionGuardedSync({
+      getState,
+      updateState,
+      expectedGeneration: 1, // stale compared to current generation 2
+      runSync: async () => {
+        runSyncCalled = true;
+        return { created: 1, updated: 0, skipped: 0 };
+      },
+    });
+    expect(preAborted.stale).toBe(true);
+    expect(runSyncCalled).toBe(false);
+  });
+
+  it("Clears legacy disconnected lastSyncAt on CONNECT_GOOGLE so a newly connected account still requires first sync", async () => {
+    // Reproduces v1.0.0 legacy state after disconnect: googleConnected=false but historical lastSyncAt persisted
+    let store = makeState({
+      lastScanAt: "2026-11-19T00:00:00.000Z",
+      googleConnected: false,
+      googleAuthVerified: false,
+      lastSyncAt: "2026-11-18T12:00:00.000Z",
+      lastSyncSummary: { created: 4, updated: 0, skipped: 0 },
+    });
+
+    const getState = async () => store;
+    const updateState = async (patch: Partial<StoredExtensionState>) => {
+      store = { ...store, ...patch };
+      return store;
+    };
+
+    const connectOutcome = await runSessionGuardedConnect({
+      getState,
+      updateState,
+      requestToken: async () => "new-account-token",
+    });
+
+    expect(connectOutcome.stale).toBe(false);
+    expect(store.googleConnected).toBe(true);
+    expect(store.googleAuthVerified).toBe(true);
+    expect(store.lastSyncAt).toBeNull();
+    expect(store.lastSyncSummary).toBeNull();
+
+    const status = evaluateSetupStatus(store, true);
+    expect(status.steps.google.state).toBe("done");
+    expect(status.steps.firstSync.state).toBe("active");
+    expect(status.overallReady).toBe(false);
+    expect(status.hasCompletedInitialSetup).toBe(false);
   });
 });

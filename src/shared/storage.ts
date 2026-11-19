@@ -23,6 +23,7 @@ export interface StoredExtensionState {
   lastSyncError: string | null;
   googleConnected: boolean;
   googleAuthVerified: boolean;
+  googleSessionGeneration: number;
   settings: ExtensionSettings;
 }
 
@@ -34,20 +35,23 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 };
 
 const STORAGE_KEY = "spadaScannerState";
+let storageWriteQueue: Promise<unknown> = Promise.resolve();
 
 export async function getStoredState(): Promise<StoredExtensionState> {
   const result = await chrome.storage.local.get(STORAGE_KEY);
   const raw = result[STORAGE_KEY] as Partial<StoredExtensionState> | undefined;
+  const googleConnected = raw?.googleConnected ?? false;
   return {
     courses: raw?.courses ?? [],
     assignments: raw?.assignments ?? [],
     lastScanAt: raw?.lastScanAt ?? null,
     lastScanError: raw?.lastScanError ?? null,
-    lastSyncAt: raw?.lastSyncAt ?? null,
-    lastSyncSummary: raw?.lastSyncSummary ?? null,
+    lastSyncAt: googleConnected ? (raw?.lastSyncAt ?? null) : null,
+    lastSyncSummary: googleConnected ? (raw?.lastSyncSummary ?? null) : null,
     lastSyncError: raw?.lastSyncError ?? null,
-    googleConnected: raw?.googleConnected ?? false,
+    googleConnected,
     googleAuthVerified: raw?.googleAuthVerified ?? false,
+    googleSessionGeneration: raw?.googleSessionGeneration ?? 0,
     settings: {
       ...DEFAULT_SETTINGS,
       ...(raw?.settings ?? {}),
@@ -58,15 +62,21 @@ export async function getStoredState(): Promise<StoredExtensionState> {
 export async function updateStoredState(
   patch: Partial<StoredExtensionState>
 ): Promise<StoredExtensionState> {
-  const current = await getStoredState();
-  const next: StoredExtensionState = {
-    ...current,
-    ...patch,
-    settings: {
-      ...current.settings,
-      ...(patch.settings ?? {}),
-    },
+  const runWrite = async (): Promise<StoredExtensionState> => {
+    const current = await getStoredState();
+    const next: StoredExtensionState = {
+      ...current,
+      ...patch,
+      settings: {
+        ...current.settings,
+        ...(patch.settings ?? {}),
+      },
+    };
+    await chrome.storage.local.set({ [STORAGE_KEY]: next });
+    return next;
   };
-  await chrome.storage.local.set({ [STORAGE_KEY]: next });
-  return next;
+
+  const pending = storageWriteQueue.then(runWrite, runWrite);
+  storageWriteQueue = pending.catch(() => {});
+  return pending;
 }

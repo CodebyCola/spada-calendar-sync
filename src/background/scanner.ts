@@ -120,17 +120,37 @@ export function isOAuthClientConfigured(): boolean {
   return isConfiguredOAuthClientId(clientId);
 }
 
+export async function requestChromeAuthToken(
+  interactive: boolean,
+  identityApi?: Partial<typeof chrome.identity>
+): Promise<string> {
+  const api =
+    arguments.length >= 2
+      ? identityApi
+      : typeof chrome !== "undefined"
+        ? chrome.identity
+        : undefined;
+
+  if (!api || typeof api.getAuthToken !== "function") {
+    throw new Error(
+      "BROWSER_UNSUPPORTED: chrome.identity.getAuthToken tidak tersedia di browser ini. Gunakan Google Chrome."
+    );
+  }
+
+  const result = await api.getAuthToken({ interactive });
+  if (!result?.token) {
+    throw new Error("Gagal mendapatkan token Google OAuth.");
+  }
+  return result.token;
+}
+
 async function getGoogleToken(interactive: boolean): Promise<string> {
   if (!isOAuthClientConfigured()) {
     throw new Error(
       "OAUTH_NOT_CONFIGURED: Isi oauth2.client_id di manifest.json dulu (lihat panduan Setup di Options / README)."
     );
   }
-  const result = await chrome.identity.getAuthToken({ interactive });
-  if (!result.token) {
-    throw new Error("Gagal mendapatkan token Google OAuth.");
-  }
-  return result.token;
+  return requestChromeAuthToken(interactive);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -152,7 +172,9 @@ export async function syncAssignmentsToGoogleCalendar(
   const removeCachedToken =
     deps?.removeCachedToken ??
     (async (token: string) => {
-      await chrome.identity.removeCachedAuthToken({ token });
+      if (typeof chrome !== "undefined" && typeof chrome.identity?.removeCachedAuthToken === "function") {
+        await chrome.identity.removeCachedAuthToken({ token });
+      }
     });
 
   // Always establish/verify Google authorization before reporting sync completion,

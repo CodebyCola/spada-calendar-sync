@@ -160,7 +160,7 @@ export function diagnoseSetupError(rawError: string): SetupErrorDiagnosis {
   }
 
   // 6. Browser / Chrome profile sign-in unsupported
-  if (/not signed in|browser sign-?in|turned off.*sign-?in|getauthtoken.*not supported|identity.*not available|chrome sign-?in/i.test(rawMessage)) {
+  if (/BROWSER_UNSUPPORTED|not signed in|browser sign-?in|turned off.*sign-?in|getauthtoken.*not supported|getauthtoken is not a function|identity.*not available|chrome sign-?in/i.test(rawMessage)) {
     return {
       code: "BROWSER_UNSUPPORTED",
       title: "Login Google memerlukan Google Chrome",
